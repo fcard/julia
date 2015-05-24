@@ -234,7 +234,13 @@ end
 # issue #9865
 @test ismatch(r"^Set\(\[.+….+\]\)$", replstr(Set(1:100)))
 
-# issue 11413
+# issue #11413
 @test string(:(*{1,2})) == "*{1,2}"
 @test string(:(*{1,x})) == "*{1,x}"
 @test string(:(-{x}))   == "-{x}"
+
+# issue #11393
+@test string(:((@macrocall x y) + z)) == "@macrocall(x,y) + z"
+@test string(:(@macrocall x y))       == "@macrocall x y"
+@test repr(:((@macrocall x y) + z))   == ":(@macrocall(x,y) + z)"
+@test repr(:(@macrocall x y))         == ":(@macrocall x y)"

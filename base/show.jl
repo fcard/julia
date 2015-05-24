@@ -250,7 +250,7 @@ show(io::IO, s::Symbol) = show_unquoted_quote_expr(io, s, 0, 0)
 
 typealias ExprNode Union(Expr, QuoteNode, SymbolNode, LineNumberNode,
                          LabelNode, GotoNode, TopNode)
-print        (io::IO, ex::ExprNode)    = (show_unquoted(io, ex); nothing)
+print        (io::IO, ex::ExprNode)    = (show_unquoted(io, ex, 0, -1); nothing)
 show         (io::IO, ex::ExprNode)    = show_unquoted_quote_expr(io, ex, 0, 0)
 show_unquoted(io::IO, ex)              = show_unquoted(io, ex, 0, 0)
 show_unquoted(io::IO, ex, indent::Int) = show_unquoted(io, ex, indent, 0)
@@ -419,7 +419,7 @@ function show_unquoted(io::IO, ex::QuoteNode, indent::Int, prec::Int)
     end
 end
 
-function show_unquoted_quote_expr(io::IO, value, indent::Int, prec::Int)
+function show_unquoted_quote_expr(io::IO, value, indent::Int, ::Int)
     if isa(value, Symbol) && !(value in quoted_syms)
         s = string(value)
         if isidentifier(s) || isoperator(value)
@@ -434,7 +434,7 @@ function show_unquoted_quote_expr(io::IO, value, indent::Int, prec::Int)
             print(io, "end")
         else
             print(io, ":(")
-            show_unquoted(io, value, indent+indent_width, 0)
+            show_unquoted(io, value, indent+indent_width, -1)
             print(io, ")")
         end
     end
@@ -610,7 +610,11 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int)
         show_list(io, args, ", ", indent)
 
     elseif is(head, :macrocall) && nargs >= 1
-        show_list(io, args, ' ', indent)
+        if prec == -1 # toplevel
+            show_list(io, args, ' ', indent)
+        else
+            show_call(io, :call, ex.args[1], ex.args[2:end], indent)
+        end
 
     elseif is(head, :typealias) && nargs == 2
         print(io, "typealias ")
