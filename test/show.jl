@@ -240,7 +240,5 @@ end
 @test string(:(-{x}))   == "-{x}"
 
 # issue #11393
-@test string(:((@macrocall x y) + z)) == "@macrocall(x,y) + z"
-@test string(:(@macrocall x y))       == "@macrocall x y"
-@test repr(:((@macrocall x y) + z))   == ":(@macrocall(x,y) + z)"
-@test repr(:(@macrocall x y))         == ":(@macrocall x y)"
+@test_repr "@macrocall(x,y) + z"
+@test_repr "@macrocall x y"
