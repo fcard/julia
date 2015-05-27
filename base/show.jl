@@ -250,7 +250,7 @@ show(io::IO, s::Symbol) = show_unquoted_quote_expr(io, s, 0, 0)
 
 typealias ExprNode Union(Expr, QuoteNode, SymbolNode, LineNumberNode,
                          LabelNode, GotoNode, TopNode)
-print        (io::IO, ex::ExprNode)    = (show_unquoted(io, ex, 0, -1); nothing)
+print        (io::IO, ex::ExprNode)    = (show_unquoted(io, ex); nothing)
 show         (io::IO, ex::ExprNode)    = show_unquoted_quote_expr(io, ex, 0, 0)
 show_unquoted(io::IO, ex)              = show_unquoted(io, ex, 0, 0)
 show_unquoted(io::IO, ex, indent::Int) = show_unquoted(io, ex, indent, 0)
@@ -387,12 +387,12 @@ function show_call(io::IO, head, func, func_args, indent)
     end
     if !isempty(func_args) && isa(func_args[1], Expr) && func_args[1].head === :parameters
         print(io, op)
-        show_list(io, func_args[2:end], ',', indent, 0)
+        show_list(io, func_args[2:end], ',', indent, 1)
         print(io, "; ")
-        show_list(io, func_args[1].args, ',', indent, 0)
+        show_list(io, func_args[1].args, ',', indent, 1)
         print(io, cl)
     else
-        show_enclosed_list(io, op, func_args, ",", cl, indent)
+        show_enclosed_list(io, op, func_args, ",", cl, indent, 1)
     end
 end
 
@@ -434,7 +434,7 @@ function show_unquoted_quote_expr(io::IO, value, indent::Int, ::Int)
             print(io, "end")
         else
             print(io, ":(")
-            show_unquoted(io, value, indent+indent_width, -1)
+            show_unquoted(io, value, indent+indent_width)
             print(io, ")")
         end
     end
@@ -610,10 +610,10 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int)
         show_list(io, args, ", ", indent)
 
     elseif is(head, :macrocall) && nargs >= 1
-        if prec == -1 # toplevel
-            show_list(io, args, ' ', indent)
-        else
+        if prec >= 1 # nested in calls
             show_call(io, :call, ex.args[1], ex.args[2:end], indent)
+        else
+            show_list(io, args, ' ', indent, 1)
         end
 
     elseif is(head, :typealias) && nargs == 2
