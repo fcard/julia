@@ -1,5 +1,4 @@
 module Info
-export precedence
 
 abstract Parent
 abstract Child <: Parent
