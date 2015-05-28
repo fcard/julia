@@ -240,5 +240,21 @@ end
 @test string(:(-{x}))   == "-{x}"
 
 # issue #11393
-@test_repr "@macrocall(x,y) + z"
-@test_repr "@macrocall x y"
+@test_repr "@m(x,y) + z"
+@test_repr "(@m(x,y),z)" 
+@test_repr "[@m(x,y),z]"
+@test_repr "A[@m(x,y),z]"
+@test_repr "T{@m(x,y),z}" 
+@test_repr "@m x @n(y) z"
+@test_repr "f(@m(x,y);z=@n(a))"
+@test_repr "@m(x,y).z"
+@test_repr "::@m(x,y)+z"
+@test_repr "[@m(x) y z]"
+@test_repr "[@m(x) y; z]"
+
+@test repr(:(@m x y))    == ":(@m x y)"
+@test string(:(@m x y))  ==   "@m x y"
+@test string(:(@m x y;)) == """
+begin 
+    @m x y
+end"""
