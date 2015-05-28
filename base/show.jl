@@ -344,7 +344,7 @@ show_linenumber(io::IO, line, file) = print(io," # ",file,", line ",line,':')
 # show a block, e g if/for/etc
 function show_block(io::IO, head, args::Vector, body, indent::Int)
     print(io, head, ' ')
-    show_list(io, args, ", ", indent, Info.Block())
+    show_list(io, args, ", ", indent)
 
     ind = is(head, :module) || is(head, :baremodule) ? indent : indent + indent_width
     exs = (is_expr(body, :block) || is_expr(body, :body)) ? body.args : Any[body]
@@ -483,7 +483,7 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, inf::Info.Parent)
         func_prec = operator_precedence(head)
         func_inf  = Info.InfixOperation(func_prec)
         head_     = head in expr_infix_wide ? " $head " : head
-        if func_a < prec
+        if func_prec < prec
             show_enclosed_list(io, '(', args, head_, ')', indent, func_inf, true)
         else
             show_list(io, args, head_, indent, func_inf, true)
