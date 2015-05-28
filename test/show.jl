@@ -241,10 +241,10 @@ end
 
 # issue #11393
 @test_repr "@m(x,y) + z"
-@test_repr "(@m(x,y),z)" 
+@test_repr "(@m(x,y),z)"
 @test_repr "[@m(x,y),z]"
 @test_repr "A[@m(x,y),z]"
-@test_repr "T{@m(x,y),z}" 
+@test_repr "T{@m(x,y),z}"
 @test_repr "@m x @n(y) z"
 @test_repr "f(@m(x,y);z=@n(a))"
 @test_repr "@m(x,y).z"
@@ -254,7 +254,4 @@ end
 
 @test repr(:(@m x y))    == ":(@m x y)"
 @test string(:(@m x y))  ==   "@m x y"
-@test string(:(@m x y;)) == """
-begin 
-    @m x y
-end"""
+@test string(:(@m x y;)) == "begin \n    @m x y\nend"
