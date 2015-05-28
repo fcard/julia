@@ -1,5 +1,4 @@
 module Info
-import Base: operatoe_precedence 
 export precedence
 
 abstract Parent
