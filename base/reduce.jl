@@ -298,44 +298,33 @@ end
 
 ## all & any
 
-function mapfoldl(f, ::AndFun, itr)
-    for x in itr
-        !f(x) && return false
-    end
-    return true
-end
-
-function mapfoldl(f, ::OrFun, itr)
+function any(f, itr)
     for x in itr
         f(x) && return true
     end
     return false
 end
 
-function mapreduce_impl(f, op::AndFun, A::AbstractArray{Bool}, ifirst::Int, ilast::Int)
-    while ifirst <= ilast
-        @inbounds x = A[ifirst]
-        !f(x) && return false
-        ifirst += 1
-    end
-    return true
-end
-
-function mapreduce_impl(f, op::OrFun, A::AbstractArray{Bool}, ifirst::Int, ilast::Int)
-    while ifirst <= ilast
-        @inbounds x = A[ifirst]
-        f(x) && return true
-        ifirst += 1
+function any(itr)
+    for x in itr
+        x && return true
     end
     return false
 end
 
-all(a) = mapreduce(IdFun(), AndFun(), a)
-any(a) = mapreduce(IdFun(), OrFun(), a)
+function all(f, itr)
+    for x in itr
+        !f(x) && return false
+    end
+    return true
+end
 
-all(pred::Union{Callable,Func{1}}, a) = mapreduce(pred, AndFun(), a)
-any(pred::Union{Callable,Func{1}}, a) = mapreduce(pred, OrFun(), a)
-
+function all(itr)
+    for x in itr
+        !x && return false
+    end
+    return true
+end
 
 ## in & contains
 
