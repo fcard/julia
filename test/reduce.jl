@@ -201,6 +201,16 @@ prod2(itr) = invoke(prod, Tuple{Any}, itr)
 @test reduce(&, fill(trues(5), 24))  == trues(5)
 @test reduce(&, fill(falses(5), 24)) == falses(5)
 
+# short-circuiting any and all
+
+let c1 = 0, c2 = 0, A1 = collect(1:1000), A2 = collect(1:1000)
+    any(x->(c1+=1; x==10), A1)
+    all(x->(c2+=1; x!=10), A2)
+
+    @test c1 == 10
+    @test c2 == 10
+end
+
 # in
 
 @test in(1, Int[]) == false
