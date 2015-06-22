@@ -298,15 +298,10 @@ end
 
 ## any
 
-any(itr)    = any(IdFun(), itr)
-any(f, itr) = any(specialized_unary(f), itr)
+any(itr) = any(IdFun(), itr)
 
-function any(f::IdFun, itr)
-    for x in itr
-        x && return true
-    end
-    return false
-end
+# TODO: optimize identity function
+any(f, itr) = any(UnspecializedFun{1}(f), itr)
 
 function any(f::Func{1}, itr)
     for x in itr
@@ -315,43 +310,25 @@ function any(f::Func{1}, itr)
     return false
 end
 
-function any(f::IdFun, itr::Array{Bool, 1})
-    i   = 1
-    len = length(itr)
-    while i <= len
-       @inbounds x = itr[i]
-       x && return true
-       i += 1
+function any(f::Func{1}, itr::AbstractArray)
+    @inbounds for x in itr
+        f(x) && return true
     end
     return false
 end
 
-function any(f::IdFun, itr::Array)
-    error("any(itr) expects the elements of itr to be booleans.")
-end
-
-function any{T}(f::Func{1}, itr::Array{T})
-    i   = 1
-    len = length(itr)
-    while i <= len
-       @inbounds x = itr[i]
-       f(x) && return true
-       i += 1
-    end
-    return false
+function any{T <: Union(Signed,Unsigned)}(f::IdFun, itr::AbstractArray{T})
+    # maybe deprecate this?
+    # depwarn("using any(itr) with numeric collections is deprecated, use reduce(|, itr)")
+    reduce(|, itr)
 end
 
 ## all
 
-all(itr)    = all(IdFun(), itr)
-all(f, itr) = all(specialized_unary(f), itr)
+all(itr) = all(IdFun(), itr)
 
-function all(f::IdFun, itr)
-    for x in itr
-        !x && return false
-    end
-    return true
-end
+# TODO: optimize identity function
+all(f, itr) = all(UnspecializedFun{1}(f), itr)
 
 function all(f::Func{1}, itr)
     for x in itr
@@ -360,30 +337,17 @@ function all(f::Func{1}, itr)
     return true
 end
 
-function all(f::IdFun, itr::Array{Bool})
-    i   = 1
-    len = length(itr)
-    while i <= len
-       @inbounds x = itr[i]
-       !x && return false
-       i += 1
+function all(f::Func{1}, itr::AbstractArray)
+    @inbounds for x in itr
+        !f(x) && return false
     end
     return true
 end
 
-function all(f::IdFun, itr::Array)
-    error("all(itr) expects the elements of itr to be booleans.")
-end
-
-function all{T}(f::Func{1}, itr::Array{T})
-    i   = 1
-    len = length(itr)
-    while i <= len
-       @inbounds x = itr[i]
-       !f(x) && return false
-       i += 1
-    end
-    return true
+function all{T <: Union(Signed,Unsigned)}(f::IdFun, itr::AbstractArray{T})
+    # maybe deprecate this?
+    # depwarn("using all(itr) with numeric collections is deprecated, use reduce(&, itr)")
+    reduce(&, itr)
 end
 
 ## in & contains
