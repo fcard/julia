@@ -161,6 +161,114 @@ reduce(op, v0, itr) = mapreduce(IdFun(), op, v0, itr)
 reduce(op, itr) = mapreduce(IdFun(), op, itr)
 reduce(op, a::Number) = a
 
+### short-circuiting specializations of mapreduce
+
+## helper functions
+
+# obtain return type of functions
+# maybe merge with return_types in reflection.jl?
+returntype(f, types::Tuple)           = return_types(call, (typeof(f), types...))
+returntype(f::Predicate, ::Tuple)     = [Bool]
+returntype(f::EqX, types::Tuple)      = [Bool]
+returntype(f::IdFun, types::Tuple)    = collect(types)
+returntype(f::Function, types::Tuple) = return_types(f, types)
+
+returntype(f::UnspecializedFun, types::Tuple) = return_types(f.f, types)
+
+# conditions and results of short-circuiting
+const ShortCircuits = Union{AndFun, OrFun}
+
+iszero(x::Bool) = !x
+iszero{T}(x::T) =  x == zero(T)
+
+ismax(x::Bool) = x
+ismax{T}(x::T) = x == typemax(T)
+
+shortcircuits{T <: Integer}(::AndFun, x::T) = iszero(x)
+shortcircuits{T <: Integer}(::OrFun,  x::T) = ismax(x)
+
+shortcircuits(::ShortCircuits, x) = false
+
+shorted(::AndFun) = false
+shorted(::OrFun)  = true
+
+# temporary support for the deprecated (Char,Char) methods of & and |
+shortcircuits(::AndFun, x::Char) = iszero(x, T)
+shortcircuits(::OrFun,  x::Char) = ismax(x, T)
+#---
+
+sc_finish(::AndFun) = true
+sc_finish(::OrFun)  = false
+
+# utility macro
+# maybe this could be somewhere else?
+macro inbounds_if_array(itr, block)
+    quote
+        if isa($itr, $AbstractArray)
+            @inbounds $(esc(block))
+        else
+            $(esc(block))
+        end
+    end
+end
+
+## short-circuiting definitions
+
+# preliminaries
+function mapreduce_sc(f::Func{1}, op::ShortCircuits, itr)
+    isempty(itr) && return mr_empty(f,op,itr)
+
+    x = first(itr)
+    r = f(x)
+    t = typeof(r)
+
+    ftypes = returntype(f, (eltype(itr),))
+
+    if ftypes == [t] && t <: Integer && isleaftype(t)
+        shortcircuits(op,r) && return r
+        mapreduce_sc(f, op, itr, r)
+    else
+        _mapreduce(f, op, itr)
+    end
+end
+
+# loop
+function mapreduce_sc{T}(f::Func{1}, op::ShortCircuits, itr, r::T)
+    local v::T = r
+    @inbounds_if_array itr begin
+        for x in itr
+            v = op(v, f(x)::T)
+            shortcircuits(op, v) && return v
+        end
+    end
+    return v
+end
+
+# optimization for boolean results: No need to keep track of previous results
+function mapreduce_sc(f::Func{1}, op::ShortCircuits, itr, r::Bool)
+    @inbounds_if_array itr begin
+        for x in itr
+            v::Bool = f(x)::Bool
+            shortcircuits(op, v) && return shorted(op)
+        end
+    end
+    return sc_finish(op)
+end
+
+mapreduce_sc(f::Function, op::ShortCircuits, itr) =
+    mapreduce_sc(specialized_unary(f), op, itr)
+
+
+# resolve ambiguities
+mapreduce(f, op::ShortCircuits, itr::Number) = f(a)
+
+mapreduce(f, op::ShortCircuits, itr::AbstractArray) =
+    mapreduce_sc(f, op, itr)
+
+# entry method
+mapreduce(f, op::ShortCircuits, itr) =
+    mapreduce_sc(f, op, itr)
+
 
 ###### Specific reduction functions ######
 
@@ -296,68 +404,39 @@ function extrema(itr)
     return (vmin, vmax)
 end
 
-## any
+## all & any
+
+# make sure that the specializable unary functions are defined before `any` or `all` are used
+# move to functors.jl?
+for fun in [:identity, :abs, :abs2, :exp, :log]
+    eval(Expr(:function, fun))
+end
 
 any(itr) = any(IdFun(), itr)
-
-# TODO: optimize identity function
-any(f, itr) = any(UnspecializedFun{1}(f), itr)
-
-function any(f::Func{1}, itr)
-    for x in itr
-        f(x) && return true
-    end
-    return false
-end
-
-function any(f::Func{1}, itr::AbstractArray)
-    @inbounds for x in itr
-        f(x) && return true
-    end
-    return false
-end
-
-function any{T <: Union(Signed,Unsigned)}(f::IdFun, itr::AbstractArray{T})
-    # maybe deprecate this?
-    # depwarn("using any(itr) with numeric collections is deprecated, use reduce(|, itr)")
-    reduce(|, itr)
-end
-
-## all
-
 all(itr) = all(IdFun(), itr)
 
-# TODO: optimize identity function
-all(f, itr) = all(UnspecializedFun{1}(f), itr)
+function any(f, itr)
+    specf  = isgeneric(f)? specialized_unary(f) : Predicate(f)
+    any(specf, itr)
+end
+
+function any(f::Func{1}, itr)
+    result = mapreduce_sc(f, OrFun(), itr)
+    isa(result, Bool)? result : nonboolean_any(result)
+end
+
+function all(f, itr)
+    specf  = isgeneric(f)? specialized_unary(f) : Predicate(f)
+    all(specf, itr)
+end
 
 function all(f::Func{1}, itr)
-    for x in itr
-        !f(x) && return false
-    end
-    return true
-end
-
-function all(f::Func{1}, itr::AbstractArray)
-    @inbounds for x in itr
-        !f(x) && return false
-    end
-    return true
-end
-
-function all{T <: Union(Signed,Unsigned)}(f::IdFun, itr::AbstractArray{T})
-    # maybe deprecate this?
-    # depwarn("using all(itr) with numeric collections is deprecated, use reduce(&, itr)")
-    reduce(&, itr)
+    result = mapreduce_sc(f, AndFun(), itr)
+    isa(result, Bool)? result : nonboolean_all(result)
 end
 
 ## in & contains
 
-immutable EqX{T} <: Func{1}
-    x::T
-end
-EqX{T}(x::T) = EqX{T}(x)
-
-call(f::EqX, y) = f.x == y
 in(x, itr) = any(EqX(x), itr)
 
 const ∈ = in

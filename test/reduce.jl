@@ -203,12 +203,11 @@ prod2(itr) = invoke(prod, Tuple{Any}, itr)
 
 # short-circuiting any and all
 
-let c1 = 0, c2 = 0, A = 1:1000
-    any(x->(c1+=1; x==10), A)
-    all(x->(c2+=1; x!=10), A)
+let c = [0, 0], A = 1:1000
+    any(x->(c[1]=x; x==10), A)
+    all(x->(c[2]=x; x!=10), A)
 
-    @test c1 == 10
-    @test c2 == 10
+    @test c == [10,10]
 end
 
 # in

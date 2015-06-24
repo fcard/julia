@@ -527,3 +527,20 @@ end
 function start_timer(t, d, r)
     error("start_timer is deprecated. Use Timer(callback, delay, repeat) instead.")
 end
+
+const UnionType = Union
+export UnionType
+
+# 11774
+# when removing these deprecations, move them to reduce.jl, remove the depwarns and uncomment the errors.
+function nonboolean_any(result)
+    depwarn("any(f, itr) where f doesn't return Bool is deprecated, use mapreduce(f, |, itr) instead.", :nonboolean_any)
+    #throw(ArgumentError("any(f, itr) only accepts functions that return booleans. Use mapreduce(f, |, itr) instead."))
+    return result
+end
+
+function nonboolean_all(result)
+    depwarn("all(f, itr) where f doesn't return Bool is deprecated, use mapreduce(f, &, itr) instead.", :nonboolean_all)
+    #throw(ArgumentError("all(f, itr) only accepts functions that return booleans. Use mapreduce(f, &, itr) instead."))
+    return result
+end
