@@ -155,7 +155,7 @@ end
 mapreduce(f, op, A::AbstractArray) = _mapreduce(f, op, A)
 mapreduce(f, op, a::Number) = f(a)
 
-mapreduce(f, op::Function, A::AbstractArray) = _mapreduce(f, specialized_binary(op), A)
+mapreduce(f, op::Function, A::AbstractArray) = mapreduce(f, specialized_binary(op), A)
 
 reduce(op, v0, itr) = mapreduce(IdFun(), op, v0, itr)
 reduce(op, itr) = mapreduce(IdFun(), op, itr)
