@@ -163,111 +163,51 @@ reduce(op, a::Number) = a
 
 ### short-circuiting specializations of mapreduce
 
-## helper functions
+## conditions and results of short-circuiting
 
-# obtain return type of functions
-# maybe merge with return_types in reflection.jl?
-returntype(f, types::Tuple)           = return_types(call, (typeof(f), types...))
-returntype(f::Predicate, ::Tuple)     = [Bool]
-returntype(f::EqX, types::Tuple)      = [Bool]
-returntype(f::IdFun, types::Tuple)    = collect(types)
-returntype(f::Function, types::Tuple) = return_types(f, types)
+const ShortCircuiting = Union{AndFun, OrFun}
+const ReturnsBool     = Union{EqX, Predicate}
 
-returntype(f::UnspecializedFun, types::Tuple) = return_types(f.f, types)
-
-# conditions and results of short-circuiting
-const ShortCircuits = Union{AndFun, OrFun}
-
-iszero(x::Bool) = !x
-iszero{T}(x::T) =  x == zero(T)
-
-ismax(x::Bool) = x
-ismax{T}(x::T) = x == typemax(T)
-
-shortcircuits{T <: Integer}(::AndFun, x::T) = iszero(x)
-shortcircuits{T <: Integer}(::OrFun,  x::T) = ismax(x)
-
-shortcircuits(::ShortCircuits, x) = false
+shortcircuits(::AndFun, x::Bool) = !x
+shortcircuits(::OrFun,  x::Bool) =  x
 
 shorted(::AndFun) = false
 shorted(::OrFun)  = true
 
-# temporary support for the deprecated (Char,Char) methods of & and |
-shortcircuits(::AndFun, x::Char) = iszero(x, T)
-shortcircuits(::OrFun,  x::Char) = ismax(x, T)
-#---
-
 sc_finish(::AndFun) = true
 sc_finish(::OrFun)  = false
 
-# utility macro
-# maybe this could be somewhere else?
-macro inbounds_if_array(itr, block)
-    quote
-        if isa($itr, $AbstractArray)
-            @inbounds $(esc(block))
-        else
-            $(esc(block))
-        end
-    end
-end
+## mapreduce definitions
 
-## short-circuiting definitions
-
-# preliminaries
-function mapreduce_sc(f::Func{1}, op::ShortCircuits, itr)
-    isempty(itr) && return mr_empty(f,op,itr)
-
-    x = first(itr)
-    r = f(x)
-    t = typeof(r)
-
-    ftypes = returntype(f, (eltype(itr),))
-
-    if ftypes == [t] && t <: Integer && isleaftype(t)
-        shortcircuits(op,r) && return r
-        mapreduce_sc(f, op, itr, r)
-    else
-        _mapreduce(f, op, itr)
-    end
-end
-
-# loop
-function mapreduce_sc{T}(f::Func{1}, op::ShortCircuits, itr, r::T)
-    local v::T = r
-    @inbounds_if_array itr begin
-        for x in itr
-            v = op(v, f(x)::T)
-            shortcircuits(op, v) && return v
-        end
-    end
-    return v
-end
-
-# optimization for boolean results: No need to keep track of previous results
-function mapreduce_sc(f::Func{1}, op::ShortCircuits, itr, r::Bool)
-    @inbounds_if_array itr begin
-        for x in itr
-            v::Bool = f(x)::Bool
-            shortcircuits(op, v) && return shorted(op)
-        end
+function mapreduce_sc_impl(f, op, itr::AbstractArray)
+    @inbounds for x in itr
+        shortcircuits(op, f(x)) && return shorted(op)
     end
     return sc_finish(op)
 end
 
-mapreduce_sc(f::Function, op::ShortCircuits, itr) =
-    mapreduce_sc(specialized_unary(f), op, itr)
+function mapreduce_sc_impl(f, op, itr)
+    for x in itr
+        shortcircuits(op, f(x)) && return shorted(op)
+    end
+    return sc_finish(op)
+end
 
+mapreduce_no_sc(f, op, itr::Any)           =  mapfoldl(f, op, itr)
+mapreduce_no_sc(f, op, itr::AbstractArray) = _mapreduce(f, op, itr)
 
-# resolve ambiguities
-mapreduce(f, op::ShortCircuits, itr::Number) = f(a)
+mapreduce_sc(f::Function,    op, itr) = mapreduce_sc(specialized_unary(f), op, itr)
+mapreduce_sc(f::ReturnsBool, op, itr) = mapreduce_sc_impl(f, op, itr)
+mapreduce_sc(f::Func{1},     op, itr) = mapreduce_no_sc(f, op, itr)
 
-mapreduce(f, op::ShortCircuits, itr::AbstractArray) =
-    mapreduce_sc(f, op, itr)
+mapreduce_sc(f::IdFun, op, itr) =
+    eltype(itr) <: Bool?
+        mapreduce_sc_impl(f, op, itr) :
+        mapreduce_no_sc(f, op, itr)
 
-# entry method
-mapreduce(f, op::ShortCircuits, itr) =
-    mapreduce_sc(f, op, itr)
+mapreduce(f, op::ShortCircuiting, n::Number) = n
+mapreduce(f, op::ShortCircuiting, itr::AbstractArray) = mapreduce_sc(f,op,itr)
+mapreduce(f, op::ShortCircuiting, itr::Any)           = mapreduce_sc(f,op,itr)
 
 
 ###### Specific reduction functions ######
@@ -406,34 +346,25 @@ end
 
 ## all & any
 
-# make sure that the specializable unary functions are defined before `any` or `all` are used
-# move to functors.jl?
-for fun in [:identity, :abs, :abs2, :exp, :log]
-    eval(Expr(:function, fun))
-end
+# make sure that the identity function is defined before `any` or `all` are used
+function identity end
 
 any(itr) = any(IdFun(), itr)
 all(itr) = all(IdFun(), itr)
 
-function any(f, itr)
-    specf  = isgeneric(f)? specialized_unary(f) : Predicate(f)
-    any(specf, itr)
-end
+any(f::Function, itr) = any(f === identity? IdFun() : Predicate(f), itr)
+any(f::Func{1},  itr) = mapreduce(f, OrFun(), itr)
+any(f::IdFun,    itr) =
+    eltype(itr) <: Bool?
+        mapreduce(f, OrFun(), itr) :
+        nonboolean_any(itr)
 
-function any(f::Func{1}, itr)
-    result = mapreduce_sc(f, OrFun(), itr)
-    isa(result, Bool)? result : nonboolean_any(result)
-end
-
-function all(f, itr)
-    specf  = isgeneric(f)? specialized_unary(f) : Predicate(f)
-    all(specf, itr)
-end
-
-function all(f::Func{1}, itr)
-    result = mapreduce_sc(f, AndFun(), itr)
-    isa(result, Bool)? result : nonboolean_all(result)
-end
+all(f::Function, itr) = all(f === identity? IdFun() : Predicate(f), itr)
+all(f::Func{1},  itr) = mapreduce(f, AndFun(), itr)
+all(f::IdFun,    itr) =
+    eltype(itr) <: Bool?
+        mapreduce(f, AndFun(), itr) :
+        nonboolean_all(itr)
 
 ## in & contains
 

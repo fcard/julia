@@ -533,14 +533,14 @@ export UnionType
 
 # 11774
 # when removing these deprecations, move them to reduce.jl, remove the depwarns and uncomment the errors.
-function nonboolean_any(result)
-    depwarn("any(f, itr) where f doesn't return Bool is deprecated, use mapreduce(f, |, itr) instead.", :nonboolean_any)
-    #throw(ArgumentError("any(f, itr) only accepts functions that return booleans. Use mapreduce(f, |, itr) instead."))
-    return result
+function nonboolean_any(itr)
+    depwarn("using non-boolean collections with any(itr) is deprecated, use reduce(|, itr) instead.", :nonboolean_any)
+    #throw(ArgumentError("any(itr) only accepts boolean collections. Use reduce(|, itr) instead."))
+    reduce(|, itr)
 end
 
-function nonboolean_all(result)
-    depwarn("all(f, itr) where f doesn't return Bool is deprecated, use mapreduce(f, &, itr) instead.", :nonboolean_all)
-    #throw(ArgumentError("all(f, itr) only accepts functions that return booleans. Use mapreduce(f, &, itr) instead."))
-    return result
+function nonboolean_all(itr)
+    depwarn("using non-boolean collections with all(itr) is deprecated, use reduce(&, itr) instead.", :nonboolean_all)
+    #throw(ArgumentError("all(itr) only accepts boolean collections. Use reduce(|, itr) instead."))
+    reduce(&, itr)
 end
