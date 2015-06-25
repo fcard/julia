@@ -353,17 +353,17 @@ any(itr) = any(IdFun(), itr)
 all(itr) = all(IdFun(), itr)
 
 any(f::Function, itr) = any(f === identity? IdFun() : Predicate(f), itr)
-any(f::Func{1},  itr) = mapreduce(f, OrFun(), itr)
+any(f::Func{1},  itr) = mapreduce_sc_impl(f, OrFun(), itr)
 any(f::IdFun,    itr) =
     eltype(itr) <: Bool?
-        mapreduce(f, OrFun(), itr) :
+        mapreduce_sc_impl(f, OrFun(), itr) :
         nonboolean_any(itr)
 
 all(f::Function, itr) = all(f === identity? IdFun() : Predicate(f), itr)
-all(f::Func{1},  itr) = mapreduce(f, AndFun(), itr)
+all(f::Func{1},  itr) = mapreduce_sc_impl(f, AndFun(), itr)
 all(f::IdFun,    itr) =
     eltype(itr) <: Bool?
-        mapreduce(f, AndFun(), itr) :
+        mapreduce_sc_impl(f, AndFun(), itr) :
         nonboolean_all(itr)
 
 ## in & contains
