@@ -201,6 +201,9 @@ prod2(itr) = invoke(prod, Tuple{Any}, itr)
 @test reduce(&, fill(trues(5), 24))  == trues(5)
 @test reduce(&, fill(falses(5), 24)) == falses(5)
 
+@test_throws TypeError any(x->0, [false])
+@test_throws TypeError all(x->0, [false])
+
 # short-circuiting any and all
 
 let c = [0, 0], A = 1:1000
