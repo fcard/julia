@@ -335,7 +335,7 @@ function _skipchars_impl(action, io::IO, pred)
             seek(io,position(io)-sizeof(string(c)))
             break
         end
-     end
+    end
     return io
 end
 
