@@ -68,6 +68,8 @@ JL_DLLEXPORT jl_value_t *jl_emptytuple=NULL;
 jl_svec_t *jl_emptysvec;
 jl_value_t *jl_nothing;
 
+jl_cgparams_t jl_default_cgparams;
+
 // --- type properties and predicates ---
 
 STATIC_INLINE int is_unspec(jl_datatype_t *dt)
@@ -2198,8 +2200,10 @@ static jl_value_t *inst_datatype(jl_datatype_t *dt, jl_svec_t *p, jl_value_t **i
         jl_value_t *va = iparams[ntp - 1];
         // return same `Tuple` object for types equal to it
         if (ntp == 1 && jl_tparam0(va) == (jl_value_t*)jl_any_type &&
-            jl_tparam1(va) == jl_tparam1(jl_tparam0(jl_anytuple_type)))
+            jl_tparam1(va) == jl_tparam1(jl_tparam0(jl_anytuple_type))) {
+            if (cacheable) JL_UNLOCK(&typecache_lock); // Might GC
             return (jl_value_t*)jl_anytuple_type;
+        }
         if (jl_is_long(jl_tparam1(va))) {
             ssize_t nt = jl_unbox_long(jl_tparam1(va));
             if (nt < 0)
@@ -3528,6 +3532,8 @@ void jl_init_types(void)
     jl_type_type = jl_new_abstracttype((jl_value_t*)jl_symbol("Type"), jl_any_type, jl_emptysvec);
     jl_type_type_mt = jl_new_method_table(jl_type_type->name->name, ptls->current_module);
     jl_type_type->name->mt = jl_type_type_mt;
+
+    jl_default_cgparams = (jl_cgparams_t){1, 1, 1, 1, 1, 1, 1};
 
     // initialize them. lots of cycles.
     jl_datatype_type->name = jl_new_typename(jl_symbol("DataType"));

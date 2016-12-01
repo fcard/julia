@@ -47,139 +47,6 @@ type.
 
    For a given iterable object and iteration state, return the current item and the next iteration state.
 
-.. function:: zip(iters...)
-
-   .. Docstring generated from Julia source
-
-   For a set of iterable objects, returns an iterable of tuples, where the ``i``\ th tuple contains the ``i``\ th component of each input iterable.
-
-   Note that :func:`zip` is its own inverse: ``collect(zip(zip(a...)...)) == collect(a)``\ .
-
-   .. doctest::
-
-       julia> a = 1:5
-       1:5
-
-       julia> b = ["e","d","b","c","a"]
-       5-element Array{String,1}:
-        "e"
-        "d"
-        "b"
-        "c"
-        "a"
-
-       julia> c = zip(a,b)
-       Base.Zip2{UnitRange{Int64},Array{String,1}}(1:5,String["e","d","b","c","a"])
-
-       julia> length(c)
-       5
-
-       julia> first(c)
-       (1,"e")
-
-.. function:: enumerate(iter)
-
-   .. Docstring generated from Julia source
-
-   An iterator that yields ``(i, x)`` where ``i`` is a counter starting at 1, and ``x`` is the ``i``\ th value from the given iterator. It's useful when you need not only the values ``x`` over which you are iterating, but also the number of iterations so far. Note that ``i`` may not be valid for indexing ``iter``\ ; it's also possible that ``x != iter[i]``\ , if ``iter`` has indices that do not start at 1.
-
-   .. doctest::
-
-       julia> a = ["a", "b", "c"];
-
-       julia> for (index, value) in enumerate(a)
-                  println("$index $value")
-              end
-       1 a
-       2 b
-       3 c
-
-.. function:: rest(iter, state)
-
-   .. Docstring generated from Julia source
-
-   An iterator that yields the same elements as ``iter``\ , but starting at the given ``state``\ .
-
-.. function:: countfrom(start=1, step=1)
-
-   .. Docstring generated from Julia source
-
-   An iterator that counts forever, starting at ``start`` and incrementing by ``step``\ .
-
-.. function:: take(iter, n)
-
-   .. Docstring generated from Julia source
-
-   An iterator that generates at most the first ``n`` elements of ``iter``\ .
-
-   .. doctest::
-
-       julia> a = 1:2:11
-       1:2:11
-
-       julia> collect(a)
-       6-element Array{Int64,1}:
-         1
-         3
-         5
-         7
-         9
-        11
-
-       julia> collect(take(a,3))
-       3-element Array{Int64,1}:
-        1
-        3
-        5
-
-.. function:: drop(iter, n)
-
-   .. Docstring generated from Julia source
-
-   An iterator that generates all but the first ``n`` elements of ``iter``\ .
-
-   .. doctest::
-
-       julia> a = 1:2:11
-       1:2:11
-
-       julia> collect(a)
-       6-element Array{Int64,1}:
-         1
-         3
-         5
-         7
-         9
-        11
-
-       julia> collect(drop(a,4))
-       2-element Array{Int64,1}:
-         9
-        11
-
-.. function:: cycle(iter)
-
-   .. Docstring generated from Julia source
-
-   An iterator that cycles through ``iter`` forever.
-
-.. function:: repeated(x[, n::Int])
-
-   .. Docstring generated from Julia source
-
-   An iterator that generates the value ``x`` forever. If ``n`` is specified, generates ``x`` that many times (equivalent to ``take(repeated(x), n)``\ ).
-
-   .. doctest::
-
-       julia> a = repeated([1 2], 4);
-
-       julia> collect(a)
-       4-element Array{Array{Int64,2},1}:
-        [1 2]
-        [1 2]
-        [1 2]
-        [1 2]
-
 .. function:: iteratorsize(itertype::Type) -> IteratorSize
 
    .. Docstring generated from Julia source
@@ -538,34 +405,58 @@ Iterable Collections
 
    .. Docstring generated from Julia source
 
-   Returns the index of the maximum element in a collection. The collection must not be empty.
+   Returns the index of the maximum element in a collection. If there are multiple maximal elements, then the first one will be returned. ``NaN`` values are ignored, unless all elements are ``NaN``\ .
+
+   The collection must not be empty.
 
    .. doctest::
 
        julia> indmax([8,0.1,-9,pi])
        1
 
+       julia> indmax([1,7,7,6])
+       2
+
+       julia> indmax([1,7,7,NaN])
+       2
+
 .. function:: indmin(itr) -> Integer
 
    .. Docstring generated from Julia source
 
-   Returns the index of the minimum element in a collection. The collection must not be empty.
+   Returns the index of the minimum element in a collection. If there are multiple minimal elements, then the first one will be returned. ``NaN`` values are ignored, unless all elements are ``NaN``\ .
+
+   The collection must not be empty.
 
    .. doctest::
 
        julia> indmin([8,0.1,-9,pi])
        3
 
+       julia> indmin([7,1,1,6])
+       2
+
+       julia> indmin([7,1,1,NaN])
+       2
+
 .. function:: findmax(itr) -> (x, index)
 
    .. Docstring generated from Julia source
 
-   Returns the maximum element and its index. The collection must not be empty.
+   Returns the maximum element of the collection ``itr`` and its index. If there are multiple maximal elements, then the first one will be returned. ``NaN`` values are ignored, unless all elements are ``NaN``\ .
+
+   The collection must not be empty.
 
    .. doctest::
 
        julia> findmax([8,0.1,-9,pi])
        (8.0,1)
+
+       julia> findmax([1,7,7,6])
+       (7,2)
+
+       julia> findmax([1,7,7,NaN])
+       (7.0,2)
 
 .. function:: findmax(A, region) -> (maxval, index)
 
@@ -577,12 +468,20 @@ Iterable Collections
 
    .. Docstring generated from Julia source
 
-   Returns the minimum element and its index. The collection must not be empty.
+   Returns the minimum element of the collection ``itr`` and its index. If there are multiple minimal elements, then the first one will be returned. ``NaN`` values are ignored, unless all elements are ``NaN``\ .
+
+   The collection must not be empty.
 
    .. doctest::
 
        julia> findmin([8,0.1,-9,pi])
        (-9.0,3)
+
+       julia> findmin([7,1,1,6])
+       (1,2)
+
+       julia> findmin([7,1,1,NaN])
+       (1.0,2)
 
 .. function:: findmin(A, region) -> (minval, index)
 
@@ -1607,7 +1506,7 @@ Dequeues
 
        julia> deleteat!([6, 5, 4, 3, 2, 1], (2, 2))
        ERROR: ArgumentError: indices must be unique and sorted
-        in deleteat!(::Array{Int64,1}, ::Tuple{Int64,Int64}) at ./array.jl:727
+        in deleteat!(::Array{Int64,1}, ::Tuple{Int64,Int64}) at ./array.jl:748
         ...
 
 .. function:: splice!(a::Vector, index::Integer, [replacement]) -> item

@@ -1,5 +1,13 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
+module Iterators
+
+import Base: start, done, next, isempty, length, size, eltype, iteratorsize, iteratoreltype, indices, ndims
+
+using Base: tuple_type_cons, SizeUnknown, HasLength, HasShape, IsInfinite, EltypeUnknown, HasEltype, OneTo
+
+export enumerate, zip, rest, countfrom, take, drop, cycle, repeated, product, flatten, partition
+
 _min_length(a, b, ::IsInfinite, ::IsInfinite) = min(length(a),length(b)) # inherit behaviour, error
 _min_length(a, b, A, ::IsInfinite) = length(a)
 _min_length(a, b, ::IsInfinite, B) = length(b)
@@ -9,6 +17,14 @@ _diff_length(a, b, A, ::IsInfinite) = 0
 _diff_length(a, b, ::IsInfinite, ::IsInfinite) = 0
 _diff_length(a, b, ::IsInfinite, B) = length(a) # inherit behaviour, error
 _diff_length(a, b, A, B) = max(length(a)-length(b), 0)
+
+and_iteratorsize{T}(isz::T, ::T) = isz
+and_iteratorsize(::HasLength, ::HasShape) = HasLength()
+and_iteratorsize(::HasShape, ::HasLength) = HasLength()
+and_iteratorsize(a, b) = SizeUnknown()
+
+and_iteratoreltype{T}(iel::T, ::T) = iel
+and_iteratoreltype(a, b) = EltypeUnknown()
 
 # enumerate
 
@@ -128,7 +144,7 @@ julia> b = ["e","d","b","c","a"]
  "a"
 
 julia> c = zip(a,b)
-Base.Zip2{UnitRange{Int64},Array{String,1}}(1:5,String["e","d","b","c","a"])
+Base.Iterators.Zip2{UnitRange{Int64},Array{String,1}}(1:5,String["e","d","b","c","a"])
 
 julia> length(c)
 5
@@ -160,25 +176,6 @@ immutable Filter{F,I}
     itr::I
 end
 
-"""
-    filter(function, collection)
-
-Return a copy of `collection`, removing elements for which `function` is `false`. For
-associative collections, the function is passed two arguments (key and value).
-
-```jldocttest
-julia> a = 1:10
-1:10
-
-julia> filter(isodd, a)
-5-element Array{Int64,1}:
- 1
- 3
- 5
- 7
- 9
-```
-"""
 filter(flt, itr) = Filter(flt, itr)
 
 start(f::Filter) = start_filter(f.flt, f.itr)
@@ -238,42 +235,6 @@ rest_iteratorsize(::IsInfinite) = IsInfinite()
 iteratorsize{I,S}(::Type{Rest{I,S}}) = rest_iteratorsize(iteratorsize(I))
 
 
-"""
-    head_and_tail(c, n) -> head, tail
-
-Returns `head`: the first `n` elements of `c`;
-and `tail`: an iterator over the remaining elements.
-
-```jldoctest
-julia> a = 1:10
-1:10
-
-julia> b, c = Base.head_and_tail(a, 3)
-([1,2,3],Base.Rest{UnitRange{Int64},Int64}(1:10,4))
-
-julia> collect(c)
-7-element Array{Any,1}:
-  4
-  5
-  6
-  7
-  8
-  9
- 10
-```
-"""
-function head_and_tail(c, n)
-    head = Vector{eltype(c)}(n)
-    s = start(c)
-    i = 0
-    while i < n && !done(c, s)
-        i += 1
-        head[i], s = next(c, s)
-    end
-    return resize!(head, i), rest(c, s)
-end
-
-
 # Count -- infinite counting
 
 immutable Count{S<:Number}
@@ -323,15 +284,15 @@ julia> collect(a)
   9
  11
 
-julia> collect(take(a,3))
+julia> collect(Iterators.take(a,3))
 3-element Array{Int64,1}:
  1
  3
  5
 ```
 """
-take(xs, n::Int) = Take(xs, n)
-take(xs::Take, n::Int) = Take(xs.xs, min(n, xs.n))
+take(xs, n::Integer) = Take(xs, Int(n))
+take(xs::Take, n::Integer) = Take(xs.xs, min(Int(n), xs.n))
 
 eltype{I}(::Type{Take{I}}) = eltype(I)
 iteratoreltype{I}(::Type{Take{I}}) = iteratoreltype(I)
@@ -378,15 +339,15 @@ julia> collect(a)
   9
  11
 
-julia> collect(drop(a,4))
+julia> collect(Iterators.drop(a,4))
 2-element Array{Int64,1}:
   9
  11
 ```
 """
-drop(xs, n::Int) = Drop(xs, n)
-drop(xs::Take, n::Int) = Take(drop(xs.xs, n), max(0, xs.n - n))
-drop(xs::Drop, n::Int) = Drop(xs.xs, n + xs.n)
+drop(xs, n::Integer) = Drop(xs, Int(n))
+drop(xs::Take, n::Integer) = Take(drop(xs.xs, Int(n)), max(0, xs.n - Int(n)))
+drop(xs::Drop, n::Integer) = Drop(xs.xs, Int(n) + xs.n)
 
 eltype{I}(::Type{Drop{I}}) = eltype(I)
 iteratoreltype{I}(::Type{Drop{I}}) = iteratoreltype(I)
@@ -459,7 +420,7 @@ An iterator that generates the value `x` forever. If `n` is specified, generates
 many times (equivalent to `take(repeated(x), n)`).
 
 ```jldoctest
-julia> a = repeated([1 2], 4);
+julia> a = Iterators.repeated([1 2], 4);
 
 julia> collect(a)
 4-element Array{Array{Int64,2},1}:
@@ -469,7 +430,7 @@ julia> collect(a)
  [1 2]
 ```
 """
-repeated(x, n::Int) = take(repeated(x), n)
+repeated(x, n::Integer) = take(repeated(x), Int(n))
 
 eltype{O}(::Type{Repeated{O}}) = O
 
@@ -548,14 +509,10 @@ a tuple whose `i`th element comes from the `i`th argument iterator. The first it
 changes the fastest. Example:
 
 ```jldoctest
-julia> collect(product(1:2,3:5))
-6-element Array{Tuple{Int64,Int64},1}:
- (1,3)
- (2,3)
- (1,4)
- (2,4)
- (1,5)
- (2,5)
+julia> collect(Iterators.product(1:2,3:5))
+2×3 Array{Tuple{Int64,Int64},2}:
+ (1,3)  (1,4)  (1,5)
+ (2,3)  (2,4)  (2,5)
 ```
 """
 product(a, b) = Prod2(a, b)
@@ -629,7 +586,7 @@ elements of those iterators.
 Put differently, the elements of the argument iterator are concatenated. Example:
 
 ```jldoctest
-julia> collect(flatten((1:2, 8:9)))
+julia> collect(Iterators.flatten((1:2, 8:9)))
 4-element Array{Int64,1}:
  1
  2
@@ -677,19 +634,19 @@ end
 
 
 """
-    partition(collection, n) -> iterator
+    partition(collection, n)
 
 Iterate over a collection `n` elements at a time.
 
 ```jldoctest
-julia> collect(partition([1,2,3,4,5], 2))
+julia> collect(Iterators.partition([1,2,3,4,5], 2))
 3-element Array{Array{Int64,1},1}:
  [1,2]
  [3,4]
  [5]
 ```
 """
-partition{T}(c::T, n::Int) = PartitionIterator{T}(c, n)
+partition{T}(c::T, n::Integer) = PartitionIterator{T}(c, Int(n))
 
 
 type PartitionIterator{T}
@@ -722,4 +679,6 @@ function next(itr::PartitionIterator, state)
         v[i], state = next(itr.c, state)
     end
     return resize!(v, i), state
+end
+
 end

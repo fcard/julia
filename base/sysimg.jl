@@ -129,7 +129,9 @@ include("intset.jl")
 include("associative.jl")
 include("dict.jl")
 include("set.jl")
-include("iterator.jl")
+include("iterators.jl")
+using .Iterators: zip, enumerate
+using .Iterators: Flatten, product  # for generators
 
 # Definition of StridedArray
 typealias StridedReshapedArray{T,N,A<:DenseArray} ReshapedArray{T,N,A}
@@ -245,7 +247,7 @@ include("mpfr.jl")
 importall .MPFR
 big(n::Integer) = convert(BigInt,n)
 big(x::AbstractFloat) = convert(BigFloat,x)
-big(q::Rational) = big(num(q))//big(den(q))
+big(q::Rational) = big(numerator(q))//big(denominator(q))
 
 include("combinatorics.jl")
 

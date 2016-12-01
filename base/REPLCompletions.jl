@@ -285,7 +285,8 @@ function get_type_call(expr::Expr)
     length(mt) == 1 || return (Any, false)
     m = first(mt)
     # Typeinference
-    return_type = Core.Inference.typeinf_type(m[3], m[1], m[2])
+    params = Core.Inference.InferenceParams()
+    return_type = Core.Inference.typeinf_type(m[3], m[1], m[2], true, params)
     return_type === nothing && return (Any, false)
     return (return_type, true)
 end
@@ -330,7 +331,7 @@ function complete_methods(ex_org::Expr)
         # Check if the method's type signature intersects the input types
         if typeintersect(Tuple{method.sig.parameters[1 : min(na, end)]...}, t_in) != Union{}
             show(io, method, kwtype=kwtype)
-            push!(out, takebuf_string(io))
+            push!(out, String(take!(io)))
         end
     end
     return out
@@ -376,10 +377,10 @@ function bslash_completions(string, pos)
         # return possible matches; these cannot be mixed with regular
         # Julian completions as only latex / emoji symbols contain the leading \
         if startswith(s, "\\:") # emoji
-            emoji_names = filter(k -> startswith(k, s), keys(emoji_symbols))
+            emoji_names = Iterators.filter(k -> startswith(k, s), keys(emoji_symbols))
             return (true, (sort!(collect(emoji_names)), slashpos:pos, true))
         else # latex
-            latex_names = filter(k -> startswith(k, s), keys(latex_symbols))
+            latex_names = Iterators.filter(k -> startswith(k, s), keys(latex_symbols))
             return (true, (sort!(collect(latex_names)), slashpos:pos, true))
         end
     end

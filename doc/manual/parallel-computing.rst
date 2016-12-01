@@ -35,7 +35,7 @@ be used from any process to refer to an object stored on a particular
 process. A remote call is a request by one process to call a certain
 function on certain arguments on another (possibly the same) process.
 
-Remote references come in two flavors - :class:`Future` and :class:`RemoteChannel`.
+Remote references come in two flavors: :class:`Future` and :class:`RemoteChannel`.
 
 A remote call returns a :class:`Future` to its result. Remote calls
 return immediately; the process that made the call proceeds to its
@@ -44,8 +44,14 @@ wait for a remote call to finish by calling :func:`wait` on the returned
 :class:`Future`, and you can obtain the full value of the result using
 :func:`fetch`.
 
-On the other hand :class:`RemoteChannel` s are rewritable. For example, multiple processes
+On the other hand, :class:`RemoteChannel` s are rewritable. For example, multiple processes
 can co-ordinate their processing by referencing the same remote :class:`Channel`\ .
+
+Each process has an associated identifier. The process providing the interactive Julia prompt
+always has an ``id`` equal to 1.
+The processes used by default for parallel operations are referred to as "workers".
+When there is only one process, process 1 is considered a worker. Otherwise, workers are
+considered to be all processes other than process 1.
 
 Let's try this out. Starting with ``julia -p n`` provides ``n`` worker
 processes on the local machine. Generally it makes sense for ``n`` to
@@ -70,7 +76,7 @@ The first argument to :func:`remotecall` is the function to call.
 Most parallel programming in Julia does not reference specific processes
 or the number of processes available, but :func:`remotecall` is
 considered a low-level interface providing finer control. The second
-argument to :func:`remotecall` is the index of the process
+argument to :func:`remotecall` is the ``id`` of the process
 that will do the work, and the remaining arguments will be passed
 to the function being called.
 
@@ -190,12 +196,8 @@ A file can also be preloaded on multiple processes at startup, and a driver scri
 
     julia -p <n> -L file1.jl -L file2.jl driver.jl
 
-Each process has an associated identifier. The process providing the interactive Julia prompt
-always has an ``id`` equal to 1, as would the Julia process running the driver script in the
-example above.
-The processes used by default for parallel operations are referred to as "workers".
-When there is only one process, process 1 is considered a worker. Otherwise, workers are
-considered to be all processes other than process 1.
+The Julia process running the driver script in the example above has an ``id`` equal to 1,
+just like a process providing an interactive prompt.
 
 The base Julia installation has in-built support for two types of clusters:
 
@@ -303,7 +305,7 @@ performed in.
 Notice that our use of this pattern with ``count_heads`` can be
 generalized. We used two explicit :obj:`@spawn` statements, which limits
 the parallelism to two processes. To run on any number of processes,
-we can use a *parallel for loop*, which can be written in Julia like
+we can use a *parallel for loop*, which can be written in Julia using :obj:`@parallel` like
 this::
 
     nheads = @parallel (+) for i=1:200000000
@@ -330,7 +332,7 @@ For example, the following code will not work as intended::
       a[i] = i
     end
 
-However, this code will not initialize all of ``a``, since each
+This code will not initialize all of ``a``, since each
 process will have a separate copy of it. Parallel for loops like these
 must be avoided. Fortunately,  `Shared Arrays <#shared-arrays>`_
 can be used to get around this limitation::
@@ -453,23 +455,170 @@ points: in this case, when :func:`remotecall_fetch` is called.
 
 Channels
 --------
-Channels provide for a fast means of inter-task communication. A
-``Channel{T}(n::Int)`` is a shared queue of maximum length ``n``
-holding objects of type ``T``. Multiple readers can read off the :class:`Channel`
-via :func:`fetch` and :func:`take!`. Multiple writers can add to the :class:`Channel` via
-:func:`put!`. :func:`isready` tests for the presence of any object in
-the channel, while :func:`wait` waits for an object to become available.
-:func:`close` closes a :class:`Channel`. On a closed :class:`Channel`\, :func:`put!` will fail,
-while :func:`take!` and :func:`fetch` successfully return any existing values
-till it is emptied.
+The section on Tasks in :ref:`man-control-flow` discussed the execution of
+multiple functions in a co-operative manner. :class:`Channels` can be quite useful
+to pass data between running tasks, particularly those involving I/O operations.
+
+Examples of operations involving I/O include reading/writing to files,
+accessing web services, executing external programs, etc. In all
+these cases, overall execution time can be improved if other tasks can be run
+while a file is being read, or while waiting for an external service/program to complete.
+
+A channel can be visualized as a pipe, i.e., it has a write end and read end.
+
+- Multiple writers in different tasks can write to the same channel concurrently via :func:`put!`
+  calls.
+- Multiple readers in different tasks can read data concurrently via :func:`take!` calls.
+- As an example::
+
+    # Given Channels c1 and c2,
+    c1 = Channel(32)
+    c2 = Channel(32)
+
+    # and a function `foo()` which reads items from from c1, processes the item read
+    # and writes a result to c2,
+    function foo()
+        while true
+            data = take!(c1)
+            .......             # process data
+            put!(c2, result)    # write out result
+        end
+    end
+
+    # we can schedule `n` instances of `foo()` to be active concurrently.
+    for _ in 1:n
+        @schedule foo()
+    end
+
+- Channels are created via the :class:`Channel{T}(sz)` constructor. The channel will only hold
+  objects of type ``T``. If the type is not specified, the channel can hold objects of
+  any type. ``sz`` refers to the maximum number of elements that can be held in the channel
+  at any time. For example, ``Channel(32)`` creates a channel that can hold a maximum of 32 objects
+  of any type. A ``Channel{MyType}(64)`` can hold up to 64 objects of ``MyType`` at any time.
+- If a :class:`Channel` is empty, readers (on a :func:`take!` call) will block until data is available.
+- If a :class:`Channel` is full, writers (on a :func:`put!` call) will block until space becomes available.
+- :func:`isready` tests for the presence of any object in the channel, while :func:`wait`
+  waits for an object to become available.
+- A :class:`Channel` is in an open state initially. This means that it can be
+  read from and written to freely via :func:`take!` and :func:`put!` calls. :func:`close` closes a :class:`Channel`.
+  On a closed :class:`Channel`, :func:`put!` will fail. For example:
+
+.. doctest::
+
+    julia> c=Channel(2);
+
+    julia> put!(c,1)   # `put!` on an open channel succeeds
+    1
+
+    julia> close(c);
+
+    julia> put!(c,2)   # `put!` on a closed channel throws an exception.
+    ERROR: InvalidStateException("Channel is closed.",:closed)
+    ...
+
+
+- :func:`take!` and :func:`fetch` (which retrieves but does not remove the value) on a closed channel
+  successfully return any existing values until it is emptied. Continuing the above example:
+
+.. doctest::
+
+        julia> fetch(c)     # Any number of `fetch` calls succeed.
+        1
+
+        julia> fetch(c)
+        1
+
+        julia> take!(c)     # The first `take!` removes the value.
+        1
+
+        julia> take!(c)     # No more data available on a closed channel.
+        ERROR: InvalidStateException("Channel is closed.",:closed)
+        ...
+
 
 A :class:`Channel` can be used as an iterable object in a ``for`` loop, in which
 case the loop runs as long as the :class:`Channel` has data or is open. The loop
-variable takes on all values added to the :class:`Channel`. An empty, closed :class:`Channel`
-causes the ``for`` loop to terminate.
+variable takes on all values added to the :class:`Channel`. The ``for`` loop is
+terminated once the :class:`Channel` is closed and emptied.
 
 
-Remote references and AbstractChannels
+For example, the following would cause the ``for`` loop to wait for more data::
+
+        c=Channel{Int}(10)
+        foreach(i->put!(c, i), 1:3)    # add a few entries
+        data = [i for i in c]
+
+while this will return after reading all data:
+
+.. doctest::
+
+        julia> c=Channel{Int}(10);
+
+        julia> foreach(i->put!(c, i), 1:3);    # add a few entries
+
+        julia> close(c);                       # `for` loops can exit
+
+        julia> data = [i for i in c]
+        3-element Array{Int64,1}:
+        1
+        2
+        3
+
+
+.. _man-channels-example:
+
+Consider a simple example using channels for inter-task communication.
+We start 4 tasks to process data from a single ``jobs`` channel.
+Jobs, identified by an id (``job_id``), are written to the channel.
+Each task in this simulation reads a ``job_id``,
+waits for a random amout of time and writes back a tuple of ``job_id`` and the simulated time to
+the results channel. Finally all the ``results`` are printed out.
+
+::
+
+    const jobs = Channel{Int}(32)
+    const results = Channel{Tuple}(32)
+
+    function do_work()
+        for job_id in jobs
+            exec_time = rand()
+            sleep(exec_time)                # simulates elapsed time doing actual work
+                                            # typically performed externally.
+            put!(results, (job_id, exec_time))
+        end
+    end
+
+    function make_jobs(n)
+        for i in 1:n
+            put!(jobs, i)
+        end
+    end
+
+    # feed the jobs channel with "n" jobs
+    n = 12
+    @schedule make_jobs(n)
+
+    # start 4 tasks to process requests in parallel
+    for i in 1:4
+        @schedule do_work()
+    end
+
+    # print out results
+    @elapsed while n > 0
+        job_id, exec_time = take!(results)
+        println("$job_id finished in $(round(exec_time,2)) seconds")
+        n = n - 1
+    end
+
+
+The current version of Julia multiplexes all tasks onto a single OS thread. Thus, while tasks
+involving I/O operations benefit from parallel execution, compute bound tasks are effectively
+executed sequentially on a single OS thread. Future versions of Julia may support scheduling
+of tasks on multiple threads, in which case compute bound tasks will see benefits of parallel
+execution too.
+
+
+Remote References and AbstractChannels
 --------------------------------------
 
 Remote references always refer to an implementation of an :class:`AbstractChannel`.
@@ -496,6 +645,71 @@ the backing store on the remote process.
 example of this is provided in ``examples/dictchannel.jl`` which uses a dictionary as its remote store.
 
 
+Channels and RemoteChannels
+---------------------------
+- A :class:`Channel` is local to a process. Worker 2 cannot directly refer to a :class:`Channel`
+  on worker 3 and vice-versa. A :class:`RemoteChannel`, however, can put and take values across
+  workers.
+- A :class:`RemoteChannel` can be thought of as a *handle* to a :class:`Channel`.
+- The process id, ``pid``, associated with a :class:`RemoteChannel` identifies the process where
+  the backing store, i.e., the backing :class:`Channel` exists.
+- Any process with a reference to a :class:`RemoteChannel` can put and take items from the channel.
+  Data is automatically sent to (or retrieved from) the process a :class:`RemoteChannel` is associated with.
+- Serializing  a :class:`Channel` also serializes any data present in the channel. Deserializing
+  it therefore effectively makes a copy of the original object.
+- On the other hand, serializing a :class:`RemoteChannel` only involves the serialization
+  of an identifier that identifies the location and instance of :class:`Channel` referred to
+  by the handle. A deserialized :class:`RemoteChannel` object (on any worker), therefore
+  also points to the same backing store as the original.
+
+The channels example from above :ref:`Channels Example <man-channels-example>` can be modified for
+interprocess communication, as shown below.
+
+We start 4 workers to process a single ``jobs`` remote channel. Jobs, identified by an id (``job_id``),
+are written to the channel. Each remotely executing task in this simulation reads a ``job_id``,
+waits for a random amout of time and writes back a tuple of ``job_id``, time taken and its own ``pid`` to
+the results channel. Finally all the ``results`` are printed out on the master process.
+
+::
+
+    addprocs(4)         # add worker processes
+
+    const jobs = RemoteChannel(()->Channel{Int}(32))
+    const results = RemoteChannel(()->Channel{Tuple}(32))
+
+    # define work function everywhere
+    @everywhere function do_work(jobs, results)
+        while true
+            job_id = take!(jobs)
+            exec_time = rand()
+            sleep(exec_time)                # simulates elapsed time doing actual work
+            put!(results, (job_id, exec_time, myid()))
+        end
+    end
+
+    function make_jobs(n)
+        for i in 1:n
+            put!(jobs, i)
+        end
+    end
+
+    # feed the jobs channel with "n" jobs
+    n = 12
+    @schedule make_jobs(n)
+
+    # start tasks on the workers to process requests in parallel
+    for p in workers()
+        @async remote_do(do_work, p, jobs, results)
+    end
+
+    # print out results
+    @elapsed while n > 0
+        job_id, exec_time, where = take!(results)
+        println("$job_id finished in $(round(exec_time,2)) seconds on worker $where")
+        n = n - 1
+    end
+
+
 Remote References and Distributed Garbage Collection
 ----------------------------------------------------
 
@@ -507,7 +721,7 @@ Every time a :class:`RemoteChannel` or a (unfetched) :class:`Future` is serializ
 to by the reference is notified. And every time a :class:`RemoteChannel` or a (unfetched) :class:`Future`
 is garbage collected locally, the node owning the value is again notified.
 
-The notifications are done via sending of "tracking" messages - an "add reference" message when
+The notifications are done via sending of "tracking" messages---an "add reference" message when
 a reference is serialized to a different process and a "delete reference" message when a reference
 is locally garbage collected.
 
@@ -661,7 +875,7 @@ Now let's compare three different versions, one that runs in a single process::
 
    advection_serial!(q, u) = advection_chunk!(q, u, 1:size(q,1), 1:size(q,2), 1:size(q,3)-1)
 
-one that uses ``@parallel``::
+one that uses :obj:`@parallel`::
 
    function advection_parallel!(q, u)
        for t = 1:size(q,3)-1
@@ -744,15 +958,15 @@ A Julia cluster has the following characteristics:
 
 Connections between workers (using the in-built TCP/IP transport) is established in the following manner:
 
-- :func:`addprocs` is called on the master process with a :class:`ClusterManager` object
+- :func:`addprocs` is called on the master process with a :class:`ClusterManager` object.
 - :func:`addprocs` calls the appropriate :func:`launch` method which spawns
-  required number of worker processes on appropriate machines
-- Each worker starts listening on a free port and writes out its host and port information to :const:`STDOUT`
-- The cluster manager captures the :const:`STDOUT` of each worker and makes it available to the master process
-- The master process parses this information and sets up TCP/IP connections to each worker
-- Every worker is also notified of other workers in the cluster
-- Each worker connects to all workers whose ``id`` is less than the worker's own ``id``
-- In this way a mesh network is established, wherein every worker is directly connected with every other worker
+  required number of worker processes on appropriate machines.
+- Each worker starts listening on a free port and writes out its host and port information to :const:`STDOUT`.
+- The cluster manager captures the :const:`STDOUT` of each worker and makes it available to the master process.
+- The master process parses this information and sets up TCP/IP connections to each worker.
+- Every worker is also notified of other workers in the cluster.
+- Each worker connects to all workers whose ``id`` is less than the worker's own ``id``.
+- In this way a mesh network is established, wherein every worker is directly connected with every other worker.
 
 
 While the default transport layer uses plain :class:`TCPSocket`, it is possible for a Julia cluster to provide
@@ -799,18 +1013,18 @@ starting workers on the same host, is implemented::
 
 The :func:`launch` method takes the following arguments:
 
-- ``manager::ClusterManager`` - the cluster manager :func:`addprocs` is called with
-- ``params::Dict`` - all the keyword arguments passed to :func:`addprocs`
-- ``launched::Array`` - the array to append one or more ``WorkerConfig`` objects to
-- ``c::Condition`` - the condition variable to be notified as and when workers are launched
+- ``manager::ClusterManager``: the cluster manager that :func:`addprocs` is called with
+- ``params::Dict``: all the keyword arguments passed to :func:`addprocs`
+- ``launched::Array``: the array to append one or more ``WorkerConfig`` objects to
+- ``c::Condition``: the condition variable to be notified as and when workers are launched
 
 The :func:`launch` method is called asynchronously in a separate task. The termination of this task
 signals that all requested workers have been launched. Hence the :func:`launch` function MUST exit as soon
 as all the requested workers have been launched.
 
-Newly launched workers are connected to each other, and the master process, in a all-to-all manner.
+Newly launched workers are connected to each other, and the master process, in an all-to-all manner.
 Specifying the command argument ``--worker <cookie>`` results in the launched processes initializing themselves
-as workers and connections being setup via TCP/IP sockets. Optionally, ``--bind-to bind_addr[:port]``
+as workers and connections being set up via TCP/IP sockets. Optionally, ``--bind-to bind_addr[:port]``
 may also be specified to enable other workers to connect to it at the specified ``bind_addr`` and ``port``.
 This is useful for multi-homed hosts.
 
@@ -866,7 +1080,7 @@ Custom cluster managers would typically specify only ``io`` or ``host`` / ``port
 
 - ``tunnel``, ``bind_addr``, ``sshflags`` and ``max_parallel`` are used when a ssh tunnel is
   required to connect to the workers from the master process.
-- ``userdata`` is provided for custom cluster managers to store their own worker specific information.
+- ``userdata`` is provided for custom cluster managers to store their own worker-specific information.
 
 
 ``manage(manager::FooManager, id::Integer, config::WorkerConfig, op::Symbol)`` is called at different
@@ -880,22 +1094,22 @@ times during the worker's lifetime with appropriate ``op`` values:
 - with ``:finalize`` for cleanup purposes.
 
 
-Cluster Managers with custom transports
+Cluster Managers with Custom Transports
 ---------------------------------------
 
 Replacing the default TCP/IP all-to-all socket connections with a custom transport layer is a little more involved.
 Each Julia process has as many communication tasks as the workers it is connected to. For example, consider a Julia cluster of
-32 processes in a all-to-all mesh network:
+32 processes in an all-to-all mesh network:
 
-- Each Julia process thus has 31 communication tasks
-- Each task handles all incoming messages from a single remote worker in a message processing loop
-- The message processing loop waits on an :class:`IO` object (for example, a :class:`TCPSocket` in the default implementation), reads an entire
-  message, processes it and waits for the next one
-- Sending messages to a process is done directly from any Julia task - not just communication tasks - again, via the appropriate
-  :class:`IO` object
+- Each Julia process thus has 31 communication tasks.
+- Each task handles all incoming messages from a single remote worker in a message-processing loop.
+- The message-processing loop waits on an :class:`IO` object (for example, a :class:`TCPSocket` in the default implementation), reads an entire
+  message, processes it and waits for the next one.
+- Sending messages to a process is done directly from any Julia task---not just communication tasks---again, via the appropriate
+  :class:`IO` object.
 
-Replacing the default transport involves the new implementation to setup connections to remote workers, and to provide appropriate
-:class:`IO` objects that the message processing loops can wait on. The manager specific callbacks to be implemented are::
+Replacing the default transport requires the new implementation to set up connections to remote workers and to provide appropriate
+:class:`IO` objects that the message-processing loops can wait on. The manager-specific callbacks to be implemented are::
 
     connect(manager::FooManager, pid::Integer, config::WorkerConfig)
     kill(manager::FooManager, pid::Int, config::WorkerConfig)
@@ -906,22 +1120,22 @@ The default implementation (which uses TCP/IP sockets) is implemented as ``conne
 and the other to write data that needs to be sent to worker ``pid``. Custom cluster managers can use an in-memory :class:`BufferStream`
 as the plumbing to proxy data between the custom, possibly non-:class:`IO` transport and Julia's in-built parallel infrastructure.
 
-A :class:`BufferStream` is an in-memory ``IOBuffer`` which behaves like an :class:`IO` - it is a stream which can be handled asynchronously.
+A :class:`BufferStream` is an in-memory ``IOBuffer`` which behaves like an :class:`IO`---it is a stream which can be handled asynchronously.
 
 Folder ``examples/clustermanager/0mq`` contains an example of using ZeroMQ to connect Julia workers in a star topology with a 0MQ broker in the middle.
-Note: The Julia processes are still all *logically* connected to each other - any worker can message any other worker directly without any
+Note: The Julia processes are still all *logically* connected to each other---any worker can message any other worker directly without any
 awareness of 0MQ being used as the transport layer.
 
 When using custom transports:
 
 - Julia workers must NOT be started with ``--worker``. Starting with ``--worker`` will result in the newly launched
-  workers defaulting to the TCP/IP socket transport implementation
+  workers defaulting to the TCP/IP socket transport implementation.
 - For every incoming logical connection with a worker, :func:`Base.process_messages(rd::IO, wr::IO)` must be called.
-  This launches a new task that handles reading and writing of messages from/to the worker represented by the :class:`IO` objects
-- ``init_worker(cookie, manager::FooManager)`` MUST be called as part of worker process initialization
+  This launches a new task that handles reading and writing of messages from/to the worker represented by the :class:`IO` objects.
+- ``init_worker(cookie, manager::FooManager)`` MUST be called as part of worker process initialization.
 - Field ``connect_at::Any`` in :class:`WorkerConfig` can be set by the cluster manager when :func:`launch` is called. The value of
   this field is passed in in all :func:`connect` callbacks. Typically, it carries information on *how to connect* to a worker. For example,
-  the TCP/IP socket transport uses this field to specify the ``(host, port)`` tuple at which to connect to a worker
+  the TCP/IP socket transport uses this field to specify the ``(host, port)`` tuple at which to connect to a worker.
 
 ``kill(manager, pid, config)`` is called to remove a worker from the cluster.
 On the master process, the corresponding :class:`IO` objects must be closed by the implementation to ensure proper cleanup.
@@ -929,25 +1143,25 @@ The default implementation simply executes an ``exit()`` call on the specified r
 
 ``examples/clustermanager/simple`` is an example that shows a simple implementation using UNIX domain sockets for cluster setup.
 
-Network requirements for LocalManager and SSHManager
+Network Requirements for LocalManager and SSHManager
 ----------------------------------------------------
 Julia clusters are designed to be executed on already secured environments on infrastructure such as local laptops,
-departmental clusters, or even on the cloud. This section covers network security requirements for the inbuilt :class:`LocalManager`
+departmental clusters, or even the cloud. This section covers network security requirements for the inbuilt :class:`LocalManager`
 and :class:`SSHManager`:
 
 - The master process does not listen on any port. It only connects out to the workers.
 
 - Each worker binds to only one of the local interfaces and listens on the first free port starting from ``9009``.
 
-- :class:`LocalManager`, i.e. ``addprocs(N)``, by default binds only to the loopback interface.
-  This means that workers consequently started on remote hosts, or anyone with malicious intentions
-  is unable to connect to the cluster. A ``addprocs(4)`` followed by a ``addprocs(["remote_host"])``
-  will fail. Some users may need to create a cluster comprised of their local system and a few remote systems.
+- :class:`LocalManager`, used by ``addprocs(N)``, by default binds only to the loopback interface.
+  This means that workers started later on remote hosts (or by anyone with malicious intentions)
+  are unable to connect to the cluster. An ``addprocs(4)`` followed by an ``addprocs(["remote_host"])``
+  will fail. Some users may need to create a cluster comprising their local system and a few remote systems.
   This can be done by explicitly requesting :class:`LocalManager` to bind to an external network interface via the
-  ``restrict`` keyword argument. For example, ``addprocs(4; restrict=false)``.
+  ``restrict`` keyword argument: ``addprocs(4; restrict=false)``.
 
-- :class:`SSHManager`, i.e. ``addprocs(list_of_remote_hosts)`` launches workers on remote hosts via SSH.
-  It is to be noted that by default SSH is only used to launch Julia workers.
+- :class:`SSHManager`, used by ``addprocs(list_of_remote_hosts)``, launches workers on remote hosts via SSH.
+  By default SSH is only used to launch Julia workers.
   Subsequent master-worker and worker-worker connections use plain, unencrypted TCP/IP sockets. The remote hosts
   must have passwordless login enabled. Additional SSH flags or credentials may be specified via keyword
   argument ``sshflags``.
@@ -961,10 +1175,10 @@ and :class:`SSHManager`:
   Note that worker-worker connections are still plain TCP and the local security policy on the remote cluster
   must allow for free connections between worker nodes, at least for ports 9009 and above.
 
-  Securing and encrypting all worker-worker traffic (via SSH), or encrypting individual messages can be done via
+  Securing and encrypting all worker-worker traffic (via SSH) or encrypting individual messages can be done via
   a custom ClusterManager.
 
-Cluster cookie
+Cluster Cookie
 --------------
 All processes in a cluster share the same cookie which, by default, is a randomly generated string on the master process:
 
@@ -979,24 +1193,23 @@ All processes in a cluster share the same cookie which, by default, is a randoml
 Note that environments requiring higher levels of security can implement this via a custom :class:`ClusterManager`.
 For example, cookies can be pre-shared and hence not specified as a startup argument.
 
-Specifying network topology (Experimental)
+Specifying Network Topology (Experimental)
 -------------------------------------------
 
-Keyword argument ``topology`` to ``addprocs`` is used to specify how the workers must be connected to each other:
+The keyword argument ``topology`` passed to ``addprocs`` is used to specify how the workers must be connected to each other:
 
-- ``:all_to_all`` : is the default, where all workers are connected to each other.
+- ``:all_to_all``, the default: all workers are connected to each other.
 
-- ``:master_slave`` : only the driver process, i.e. ``pid`` 1 has connections to the workers.
+- ``:master_slave``: only the driver process, i.e. ``pid`` 1, has connections to the workers.
 
-- ``:custom`` : the ``launch`` method of the cluster manager specifies the connection topology.
-  Fields ``ident`` and ``connect_idents`` in ``WorkerConfig`` are used to specify the  same.
-  ``connect_idents`` is a list of :class:`ClusterManager` provided identifiers to workers that worker
-  with identified by ``ident`` must connect to.
+- ``:custom``: the ``launch`` method of the cluster manager specifies the connection topology via
+  the fields ``ident`` and ``connect_idents`` in ``WorkerConfig``.
+  A worker with a cluster-manager-provided identity ``ident`` will connect to all workers specified in ``connect_idents``.
 
 Currently, sending a message between unconnected workers results in an error. This behaviour, as with the
 functionality and interface, should be considered experimental in nature and may change in future releases.
 
-Multi-threading (Experimental)
+Multi-Threading (Experimental)
 -------------------------------
 In addition to tasks, remote calls, and remote references, Julia from ``v0.5`` forwards will natively support
 multi-threading. Note that this section is experimental and the interfaces may change in the
@@ -1053,13 +1266,13 @@ Let us operate on this array simultaneously using 4 threads. We'll have each thr
 its thread ID into each location.
 
 Julia supports parallel loops using the :obj:`Threads.@threads` macro. This macro is affixed in front
-of a ``for`` loop to indicate to Julia that the loop is a multi-threaded region. ::
+of a ``for`` loop to indicate to Julia that the loop is a multi-threaded region::
 
     Threads.@threads for i = 1:10
         a[i] = Threads.threadid()
     end
 
-The iteration space is split amongst the threads, after which each thread writes its thread ID to its assigned locations.::
+The iteration space is split amongst the threads, after which each thread writes its thread ID to its assigned locations::
 
     julia> a
     10-element Array{Float64,1}:
@@ -1103,6 +1316,6 @@ It is very important that the called function does not call back into Julia.
 
 .. rubric:: Footnotes
 
-.. [#mpi2rma] In this context, MPI refers to the MPI-1 standard. Beginning with MPI-2, the MPI standards committee introduced a new set of communication mechanisms, collectively referred to as Remote Memory Access (RMA). The motivation for adding RMA to the MPI standard was to facilitate one-sided communication patterns. For additional information on the latest MPI standard, see http://www.mpi-forum.org/docs.
+.. [#mpi2rma] In this context, MPI refers to the MPI-1 standard. Beginning with MPI-2, the MPI standards committee introduced a new set of communication mechanisms, collectively referred to as Remote Memory Access (RMA). The motivation for adding RMA to the MPI standard was to facilitate one-sided communication patterns. For additional information on the latest MPI standard, see http://mpi-forum.org/docs.
 
 .. _DArray: https://github.com/JuliaParallel/DistributedArrays.jl

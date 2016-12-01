@@ -207,6 +207,21 @@ Returns `w`, a unit vector in the direction of `v`, and
 
 See also [`normalize`](:func:`normalize`), [`normalize!`](:func:`normalize!`),
 and [`LinAlg.qr!](:func:`LinAlg.qr!`).
+
+# Example
+
+```jldoctest
+julia> v = [1; 2]
+2-element Array{Int64,1}:
+ 1
+ 2
+
+julia> w, r = qr(v)
+([0.447214,0.894427],2.23606797749979)
+
+julia> w*r == v
+true
+```
 """
 function qr(v::AbstractVector)
     nrm = norm(v)
@@ -244,14 +259,14 @@ convert(::Type{AbstractMatrix}, F::Union{QR,QRCompactWY}) = F[:Q] * F[:R]
 convert(::Type{AbstractArray}, F::Union{QR,QRCompactWY}) = convert(AbstractMatrix, F)
 convert(::Type{Matrix}, F::Union{QR,QRCompactWY}) = convert(Array, convert(AbstractArray, F))
 convert(::Type{Array}, F::Union{QR,QRCompactWY}) = convert(Matrix, F)
-full(F::Union{QR,QRCompactWY}) = convert(Array, F)
+full(F::Union{QR,QRCompactWY}) = convert(AbstractArray, F)
 convert{T}(::Type{QRPivoted{T}}, A::QRPivoted) = QRPivoted(convert(AbstractMatrix{T}, A.factors), convert(Vector{T}, A.τ), A.jpvt)
 convert{T}(::Type{Factorization{T}}, A::QRPivoted) = convert(QRPivoted{T}, A)
 convert(::Type{AbstractMatrix}, F::QRPivoted) = (F[:Q] * F[:R])[:,invperm(F[:p])]
 convert(::Type{AbstractArray}, F::QRPivoted) = convert(AbstractMatrix, F)
 convert(::Type{Matrix}, F::QRPivoted) = convert(Array, convert(AbstractArray, F))
 convert(::Type{Array}, F::QRPivoted) = convert(Matrix, F)
-full(F::QRPivoted) = convert(Array, F)
+full(F::QRPivoted) = convert(AbstractArray, F)
 
 function getindex(A::QR, d::Symbol)
     m, n = size(A)

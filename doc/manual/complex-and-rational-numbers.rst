@@ -159,7 +159,7 @@ versus ``-1 + 0im`` even though ``-1 == -1 + 0im``:
     julia> sqrt(-1)
     ERROR: DomainError:
     sqrt will only return a complex result if called with a complex argument. Try sqrt(complex(x)).
-     in sqrt(::Int64) at ./math.jl:252
+     in sqrt(::Int64) at ./math.jl:278
      ...
 
     julia> sqrt(-1 + 0im)
@@ -229,14 +229,14 @@ are reduced to lowest terms such that the denominator is non-negative:
 This normalized form for a ratio of integers is unique, so equality of
 rational values can be tested by checking for equality of the numerator
 and denominator. The standardized numerator and denominator of a
-rational value can be extracted using the :func:`num` and :func:`den` functions:
+rational value can be extracted using the :func:`numerator` and :func:`denominator` functions:
 
 .. doctest::
 
-    julia> num(2//3)
+    julia> numerator(2//3)
     2
 
-    julia> den(2//3)
+    julia> denominator(2//3)
     3
 
 Direct comparison of the numerator and denominator is generally not

@@ -97,17 +97,11 @@ General I/O
 
    Create an ``IOBuffer``\ , which may optionally operate on a pre-existing array. If the readable/writable arguments are given, they restrict whether or not the buffer may be read from or written to respectively. By default the buffer is readable but not writable. The last argument optionally specifies a size beyond which the buffer may not be grown.
 
-.. function:: takebuf_array(b::IOBuffer)
+.. function:: take!(b::IOBuffer)
 
    .. Docstring generated from Julia source
 
    Obtain the contents of an ``IOBuffer`` as an array, without copying. Afterwards, the ``IOBuffer`` is reset to its initial state.
-
-.. function:: takebuf_string(b::IOBuffer)
-
-   .. Docstring generated from Julia source
-
-   Obtain the contents of an ``IOBuffer`` as a string, without copying. Afterwards, the ``IOBuffer`` is reset to its initial state.
 
 .. function:: fdio([name::AbstractString, ]fd::Integer[, own::Bool=false]) -> IOStream
 
@@ -404,11 +398,11 @@ General I/O
 
    Advance the stream until before the first character for which ``predicate`` returns ``false``\ . For example ``skipchars(stream, isspace)`` will skip all whitespace. If keyword argument ``linecomment`` is specified, characters from that character through the end of a line will also be skipped.
 
-.. function:: countlines(io,[eol::Char])
+.. function:: countlines(io::IO, eol::Char='\\n')
 
    .. Docstring generated from Julia source
 
-   Read ``io`` until the end of the stream/file and count the number of lines. To specify a file pass the filename as the first argument. EOL markers other than '\\n' are supported by passing them as the second argument.
+   Read ``io`` until the end of the stream/file and count the number of lines. To specify a file pass the filename as the first argument. EOL markers other than ``'\n'`` are supported by passing them as the second argument.
 
 .. function:: PipeBuffer(data::Vector{UInt8}=UInt8[],[maxsize::Int=typemax(Int)])
 
@@ -426,9 +420,9 @@ General I/O
 
    .. Docstring generated from Julia source
 
-   IOContext provides a mechanism for passing output configuration settings among ``show`` methods.
+   ``IOContext`` provides a mechanism for passing output configuration settings among :func:`show` methods.
 
-   In short, it is an immutable dictionary that is a subclass of ``IO``\ . It supports standard dictionary operations such as ``getindex``\ , and can also be used as an I/O stream.
+   In short, it is an immutable dictionary that is a subclass of :obj:`IO`\ . It supports standard dictionary operations such as :func:`getindex`\ , and can also be used as an I/O stream.
 
 .. function:: IOContext(io::IO, KV::Pair)
 
@@ -449,7 +443,7 @@ General I/O
 
    .. Docstring generated from Julia source
 
-   Create an ``IOContext`` that wraps an alternate ``IO`` but inherits the properties of ``context``\ .
+   Create an ``IOContext`` that wraps an alternate :func:`IO` but inherits the properties of ``context``\ .
 
 .. function:: IOContext(io::IO; properties...)
 
@@ -489,6 +483,14 @@ Text I/O
    Return a string giving a brief description of a value. By default returns ``string(typeof(x))``\ , e.g. ``Int64``\ .
 
    For arrays, returns a string of size and type info, e.g. ``10-element Array{Int64,1}``\ .
+
+   .. doctest::
+
+       julia> summary(1)
+       "Int64"
+
+       julia> summary(zeros(2))
+       "2-element Array{Float64,1}"
 
 .. function:: print(io::IO, x)
 
@@ -534,7 +536,17 @@ Text I/O
 
    .. Docstring generated from Julia source
 
-   Print ``args`` using C ``printf()`` style format specification string. Optionally, an :obj:`IOStream` may be passed as the first argument to redirect output.
+   Print ``args`` using C ``printf()`` style format specification string, with some caveats: ``Inf`` and ``NaN`` are printed consistently as ``Inf`` and ``NaN`` for flags ``%a``\ , ``%A``\ , ``%e``\ , ``%E``\ , ``%f``\ , ``%F``\ , ``%g``\ , and ``%G``\ .
+
+   Optionally, an :obj:`IOStream` may be passed as the first argument to redirect output.
+
+   **Examples**
+
+   .. doctest::
+
+       julia> @printf("%f %F %f %F\n", Inf, Inf, NaN, NaN)
+       Inf Inf NaN NaN
+
 
 .. function:: @sprintf("%Fmt", args...)
 
@@ -542,7 +554,9 @@ Text I/O
 
    Return ``@printf`` formatted output as string.
 
-   .. code-block:: julia
+   **Examples**
+
+   .. doctest::
 
        julia> s = @sprintf "this is a %s %15.1f" "test" 34.567;
 
@@ -667,7 +681,7 @@ Text I/O
 
    .. Docstring generated from Julia source
 
-   Equivalent to ``readdlm`` with ``delim`` set to comma, and type optionally defined by ``T``\ .
+   Equivalent to :func:`readdlm` with ``delim`` set to comma, and type optionally defined by ``T``\ .
 
 .. function:: writecsv(filename, A; opts)
 
@@ -679,7 +693,7 @@ Text I/O
 
    .. Docstring generated from Julia source
 
-   Returns a new write-only I/O stream, which converts any bytes written to it into base64-encoded ASCII bytes written to ``ostream``\ . Calling ``close`` on the ``Base64EncodePipe`` stream is necessary to complete the encoding (but does not close ``ostream``\ ).
+   Returns a new write-only I/O stream, which converts any bytes written to it into base64-encoded ASCII bytes written to ``ostream``\ . Calling :func:`close` on the ``Base64EncodePipe`` stream is necessary to complete the encoding (but does not close ``ostream``\ ).
 
 .. function:: Base64DecodePipe(istream)
 
@@ -692,7 +706,7 @@ Text I/O
 
    .. Docstring generated from Julia source
 
-   Given a ``write``\ -like function ``writefunc``\ , which takes an I/O stream as its first argument, ``base64encode(writefunc, args...)`` calls ``writefunc`` to write ``args...`` to a base64-encoded string, and returns the string. ``base64encode(args...)`` is equivalent to ``base64encode(write, args...)``\ : it converts its arguments into bytes using the standard ``write`` functions and returns the base64-encoded string.
+   Given a :func:`write`\ -like function ``writefunc``\ , which takes an I/O stream as its first argument, ``base64encode(writefunc, args...)`` calls ``writefunc`` to write ``args...`` to a base64-encoded string, and returns the string. ``base64encode(args...)`` is equivalent to ``base64encode(write, args...)``\ : it converts its arguments into bytes using the standard :func:`write` functions and returns the base64-encoded string.
 
 .. function:: base64decode(string)
 
@@ -774,7 +788,7 @@ Julia environments (such as the IPython-based IJulia notebook).
 
    .. Docstring generated from Julia source
 
-   Returns a boolean value indicating whether or not the object ``x`` can be written as the given ``mime`` type. (By default, this is determined automatically by the existence of the corresponding :func:`show` function for ``typeof(x)``\ .)
+   Returns a boolean value indicating whether or not the object ``x`` can be written as the given ``mime`` type. (By default, this is determined automatically by the existence of the corresponding :func:`show` method for ``typeof(x)``\ .)
 
 .. function:: reprmime(mime, x)
 
@@ -829,7 +843,7 @@ stack with:
 
    Pop the topmost backend off of the display-backend stack, or the topmost copy of ``d`` in the second variant.
 
-.. function:: TextDisplay(stream)
+.. function:: TextDisplay(io::IO)
 
    .. Docstring generated from Julia source
 
@@ -949,7 +963,7 @@ Network I/O
 
    .. Docstring generated from Julia source
 
-   Get the IP address and the port that the given ``TCPSocket`` is connected to (or bound to, in the case of ``TCPServer``\ ).
+   Get the IP address and the port that the given :obj:`TCPSocket` is connected to (or bound to, in the case of :obj:`TCPServer`\ ).
 
 .. function:: IPv4(host::Integer) -> IPv4
 
@@ -1036,7 +1050,7 @@ Network I/O
 
    .. Docstring generated from Julia source
 
-   Read a UDP packet from the specified socket, returning a tuple of (address, data), where address will be either IPv4 or IPv6 as appropriate.
+   Read a UDP packet from the specified socket, returning a tuple of ``(address, data)``\ , where ``address`` will be either IPv4 or IPv6 as appropriate.
 
 .. function:: setopt(sock::UDPSocket; multicast_loop = nothing, multicast_ttl=nothing, enable_broadcast=nothing, ttl=nothing)
 

@@ -15,7 +15,7 @@ type SharedArray{T,N} <: DenseArray{T,N}
     # Local shmem map.
     s::Array{T,N}
 
-    # idx of current workers pid into the pids vector, 0 if this shared array is not mapped locally.
+    # idx of current worker's pid in the pids vector, 0 if this shared array is not mapped locally.
     pidx::Int
 
     # the local partition into the array when viewed as a single dimensional array.
@@ -254,15 +254,16 @@ end
 """
     procs(S::SharedArray)
 
-Get the vector of processes that have mapped the shared array.
+Get the vector of processes mapping the shared array.
 """
 procs(S::SharedArray) = S.pids
 
 """
     indexpids(S::SharedArray)
 
-Returns the index of the current worker into the `pids` vector, i.e., the list of workers
-mapping the SharedArray
+Returns the current worker's index in the list of workers
+mapping the `SharedArray` (i.e. in the same list returned by `procs(S)`), or
+0 if the `SharedArray` is not mapped locally.
 """
 indexpids(S::SharedArray) = S.pidx
 
@@ -281,11 +282,11 @@ Returns a range describing the "default" indexes to be handled by the
 current process.  This range should be interpreted in the sense of
 linear indexing, i.e., as a sub-range of `1:length(S)`.  In
 multi-process contexts, returns an empty range in the parent process
-(or any process for which `indexpids` returns 0).
+(or any process for which [`indexpids`](:func:`indexpids`) returns 0).
 
 It's worth emphasizing that `localindexes` exists purely as a
 convenience, and you can partition work on the array among workers any
-way you wish.  For a SharedArray, all indexes should be equally fast
+way you wish. For a `SharedArray`, all indexes should be equally fast
 for each worker process.
 """
 localindexes(S::SharedArray) = S.pidx > 0 ? range_1dim(S, S.pidx) : 1:0

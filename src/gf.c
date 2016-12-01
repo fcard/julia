@@ -144,7 +144,7 @@ JL_DLLEXPORT jl_value_t *jl_specializations_lookup(jl_method_t *m, jl_tupletype_
 
 JL_DLLEXPORT jl_value_t *jl_methtable_lookup(jl_methtable_t *mt, jl_tupletype_t *type)
 {
-    jl_typemap_entry_t *sf = jl_typemap_assoc_by_type(mt->defs, type, NULL, 2, /*subtype*/0, /*offs*/0);
+    jl_typemap_entry_t *sf = jl_typemap_assoc_by_type(mt->defs, type, NULL, 1, /*subtype*/0, /*offs*/0);
     if (!sf)
         return jl_nothing;
     return sf->func.value;
@@ -188,13 +188,13 @@ jl_code_info_t *jl_type_infer(jl_method_instance_t *li, int force)
     JL_TIMING(INFERENCE);
     if (jl_typeinf_func == NULL)
         return NULL;
+    jl_code_info_t *src = NULL;
 #ifdef ENABLE_INFERENCE
     jl_module_t *mod = NULL;
     if (li->def != NULL)
         mod = li->def->module;
     static int inInference = 0;
     int lastIn = inInference;
-    jl_code_info_t *src = NULL;
     inInference = 1;
     if (force ||
         (mod != jl_gf_mtable(jl_typeinf_func)->module &&
@@ -1261,7 +1261,7 @@ jl_llvm_functions_t jl_compile_for_dispatch(jl_method_instance_t *li)
     decls = li->functionObjectsDecls;
     if (decls.functionObject != NULL || li->jlcall_api == 2)
         return decls;
-    return jl_compile_linfo(li, src);
+    return jl_compile_linfo(li, src, &jl_default_cgparams);
 }
 
 // compile-time method lookup
@@ -1310,7 +1310,7 @@ JL_DLLEXPORT int jl_compile_hint(jl_tupletype_t *types)
     if (jl_is_uninferred(li))
         src = jl_type_infer(li, 0);
     if (li->jlcall_api != 2)
-        jl_compile_linfo(li, src);
+        jl_compile_linfo(li, src, &jl_default_cgparams);
     return 1;
 }
 
@@ -1550,7 +1550,7 @@ static void _compile_all_deq(jl_array_t *found)
                 linfo->fptr = (jl_fptr_t)(uintptr_t)-1;
         }
         else {
-            jl_compile_linfo(linfo, src);
+            jl_compile_linfo(linfo, src, &jl_default_cgparams);
             assert(linfo->functionObjectsDecls.functionObject != NULL);
         }
     }

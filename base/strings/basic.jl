@@ -158,11 +158,7 @@ isless(a::AbstractString, b::AbstractString) = cmp(a,b) < 0
 cmp(a::String, b::String) = lexcmp(a.data, b.data)
 cmp(a::Symbol, b::Symbol) = Int(sign(ccall(:strcmp, Int32, (Cstring, Cstring), a, b)))
 
-function ==(a::String, b::String)
-    len = length(a.data)
-    return len == length(b.data) &&
-        0 == ccall(:memcmp, Int32, (Ptr{UInt8}, Ptr{UInt8}, UInt), a.data, b.data, len)
-end
+==(a::String, b::String) = a.data == b.data
 isless(a::Symbol, b::Symbol) = cmp(a,b) < 0
 
 ## Generic validation functions ##
@@ -446,7 +442,7 @@ function map(f, s::AbstractString)
         end
         write(out, c2::Char)
     end
-    String(takebuf_array(out))
+    String(take!(out))
 end
 
 function filter(f, s::AbstractString)
@@ -457,5 +453,5 @@ function filter(f, s::AbstractString)
             write(out, c)
         end
     end
-    takebuf_string(out)
+    String(take!(out))
 end

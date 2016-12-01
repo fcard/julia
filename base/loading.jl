@@ -11,7 +11,7 @@ elseif is_windows()
     # GetLongPathName Win32 function returns the case-preserved filename on NTFS.
     function isfile_casesensitive(path)
         isfile(path) || return false  # Fail fast
-        Filesystem.longpath(path) == path
+        basename(Filesystem.longpath(path)) == basename(path)
     end
 elseif is_apple()
     # HFS+ filesystem is case-preserving. The getattrlist API returns
@@ -486,10 +486,10 @@ function source_path(default::Union{AbstractString,Void}="")
     t = current_task()
     while true
         s = t.storage
-        if !is(s, nothing) && haskey(s, :SOURCE_PATH)
+        if s !== nothing && haskey(s, :SOURCE_PATH)
             return s[:SOURCE_PATH]
         end
-        if is(t, t.parent)
+        if t === t.parent
             return default
         end
         t = t.parent

@@ -6,8 +6,8 @@
     editor()
 
 Determines the editor to use when running functions like `edit`. Returns an Array compatible
-for use within backticks. You can change the editor by setting JULIA_EDITOR, VISUAL, or
-EDITOR as an environmental variable.
+for use within backticks. You can change the editor by setting `JULIA_EDITOR`, `VISUAL` or
+`EDITOR` as an environmental variable.
 """
 function editor()
     if is_windows() || is_apple()
@@ -27,7 +27,8 @@ end
     edit(path::AbstractString, line::Integer=0)
 
 Edit a file or directory optionally providing a line number to edit the file at.
-Returns to the `julia` prompt when you quit the editor.
+Returns to the `julia` prompt when you quit the editor. The editor can be changed
+by setting `JULIA_EDITOR`, `VISUAL` or `EDITOR` as an environmental variable.
 """
 function edit(path::AbstractString, line::Integer=0)
     command = editor()
@@ -74,7 +75,8 @@ end
     edit(function, [types])
 
 Edit the definition of a function, optionally specifying a tuple of types to
-indicate which method to edit.
+indicate which method to edit. The editor can be changed by setting `JULIA_EDITOR`,
+`VISUAL` or `EDITOR` as an environmental variable.
 """
 edit(f)          = edit(functionloc(f)...)
 edit(f, t::ANY)  = edit(functionloc(f,t)...)
@@ -291,7 +293,7 @@ function versioninfo(io::IO=STDOUT, verbose::Bool=false)
     if verbose
         println(io,         "Environment:")
         for (k,v) in ENV
-            if !is(match(r"JULIA|PATH|FLAG|^TERM$|HOME", String(k)), nothing)
+            if match(r"JULIA|PATH|FLAG|^TERM$|HOME", String(k)) !== nothing
                 println(io, "  $(k) = $(v)")
             end
         end
@@ -498,7 +500,7 @@ function type_close_enough(x::ANY, t::ANY)
     x == t && return true
     return (isa(x,DataType) && isa(t,DataType) && x.name === t.name &&
             !isleaftype(t) && x <: t) ||
-           (isa(x,Union) && isa(t,DataType) && any(u -> is(u,t), x.types))
+           (isa(x,Union) && isa(t,DataType) && any(u -> u===t, x.types))
 end
 
 # `methodswith` -- shows a list of methods using the type given

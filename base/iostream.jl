@@ -13,7 +13,7 @@ type IOStream <: IO
     IOStream(name::AbstractString, buf::Array{UInt8,1}) = new(pointer(buf), buf, name, -1)
 end
 # TODO: delay adding finalizer, e.g. for memio with a small buffer, or
-# in the case where we takebuf it.
+# in the case where we take! it.
 function IOStream(name::AbstractString, finalize::Bool)
     buf = zeros(UInt8,sizeof_ios_t)
     x = IOStream(name, buf)
@@ -218,17 +218,8 @@ function write(s::IOStream, c::Char)
 end
 read(s::IOStream, ::Type{Char}) = Char(ccall(:jl_getutf8, UInt32, (Ptr{Void},), s.ios))
 
-takebuf_string(s::IOStream) =
-    ccall(:jl_takebuf_string, Ref{String}, (Ptr{Void},), s.ios)
-
-takebuf_array(s::IOStream) =
-    ccall(:jl_takebuf_array, Vector{UInt8}, (Ptr{Void},), s.ios)
-
-function takebuf_raw(s::IOStream)
-    sz = position(s)
-    buf = ccall(:jl_takebuf_raw, Ptr{UInt8}, (Ptr{Void},), s.ios)
-    return buf, sz
-end
+take!(s::IOStream) =
+    ccall(:jl_take_buffer, Vector{UInt8}, (Ptr{Void},), s.ios)
 
 function readuntil(s::IOStream, delim::UInt8)
     ccall(:jl_readuntil, Array{UInt8,1}, (Ptr{Void}, UInt8), s.ios, delim)
@@ -309,27 +300,33 @@ function read(s::IOStream, nb::Integer; all::Bool=true)
 end
 
 ## Character streams ##
-const _chtmp = Array{Char}(1)
-function peekchar(s::IOStream)
-    if ccall(:ios_peekutf8, Cint, (Ptr{Void}, Ptr{Char}), s, _chtmp) < 0
-        return Char(-1)
-    end
-    return _chtmp[1]
-end
-
 function peek(s::IOStream)
     ccall(:ios_peekc, Cint, (Ptr{Void},), s)
 end
 
-function skipchars(s::IOStream, pred; linecomment::Char=Char(0xffffffff))
-    ch = peekchar(s); status = Int(ch)
-    while status >= 0 && (pred(ch) || ch == linecomment)
-        if ch == linecomment
-            readline(s)
-        else
-            read(s, Char)  # advance one character
-        end
-        ch = peekchar(s); status = Int(ch)
-    end
-    return s
+function skipchars(io::IO, pred; linecomment=nothing)
+    _skipchars_impl(_get_comment_skipper(io, linecomment), io, pred)
 end
+
+_get_comment_skipper(io, linecomment::Void) = c->false
+_get_comment_skipper(io, linecomment::Char) =
+    function(c)
+        if c == linecomment
+            readline(io)
+            return true
+        else
+            return false
+        end
+    end
+
+@noinline function _skipchars_impl(skipcomment, io::IO, pred)
+    while !eof(io)
+        c = read(io, Char)
+        if !skipcomment(c) && !pred(c)
+            seek(io,position(io)-sizeof(string(c)))
+            break
+        end
+    end
+    return io
+end
+

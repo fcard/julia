@@ -443,7 +443,7 @@ done(a::Array,i) = (@_inline_meta; i == length(a)+1)
 
 # This is more complicated than it needs to be in order to get Win64 through bootstrap
 getindex(A::Array, i1::Real) = arrayref(A, to_index(i1))
-getindex(A::Array, i1::Real, i2::Real, I::Real...) = arrayref(A, to_index(i1), to_index(i2), to_indexes(I...)...) # TODO: REMOVE FOR #14770
+getindex(A::Array, i1::Real, i2::Real, I::Real...) = (@_inline_meta; arrayref(A, to_index(i1), to_index(i2), to_indexes(I...)...)) # TODO: REMOVE FOR #14770
 
 # Faster contiguous indexing using copy! for UnitRange and Colon
 function getindex(A::Array, I::UnitRange{Int})
@@ -472,11 +472,11 @@ end
 
 ## Indexing: setindex! ##
 setindex!{T}(A::Array{T}, x, i1::Real) = arrayset(A, convert(T,x)::T, to_index(i1))
-setindex!{T}(A::Array{T}, x, i1::Real, i2::Real, I::Real...) = arrayset(A, convert(T,x)::T, to_index(i1), to_index(i2), to_indexes(I...)...) # TODO: REMOVE FOR #14770
+setindex!{T}(A::Array{T}, x, i1::Real, i2::Real, I::Real...) = (@_inline_meta; arrayset(A, convert(T,x)::T, to_index(i1), to_index(i2), to_indexes(I...)...)) # TODO: REMOVE FOR #14770
 
 # These are redundant with the abstract fallbacks but needed for bootstrap
 function setindex!(A::Array, x, I::AbstractVector{Int})
-    is(A, I) && (I = copy(I))
+    A === I && (I = copy(I))
     for i in I
         A[i] = x
     end
@@ -485,10 +485,10 @@ end
 function setindex!(A::Array, X::AbstractArray, I::AbstractVector{Int})
     setindex_shape_check(X, length(I))
     count = 1
-    if is(X,A)
+    if X === A
         X = copy(X)
-        is(I,A) && (I = X::typeof(I))
-    elseif is(I,A)
+        I===A && (I = X::typeof(I))
+    elseif I === A
         I = copy(I)
     end
     for i in I
@@ -731,7 +731,7 @@ julia> deleteat!([6, 5, 4, 3, 2, 1], 1:2:5)
 
 julia> deleteat!([6, 5, 4, 3, 2, 1], (2, 2))
 ERROR: ArgumentError: indices must be unique and sorted
- in deleteat!(::Array{Int64,1}, ::Tuple{Int64,Int64}) at ./array.jl:727
+ in deleteat!(::Array{Int64,1}, ::Tuple{Int64,Int64}) at ./array.jl:748
  ...
 ```
 """
@@ -900,6 +900,19 @@ function lexcmp(a::Array{UInt8,1}, b::Array{UInt8,1})
     return c < 0 ? -1 : c > 0 ? +1 : cmp(length(a),length(b))
 end
 
+# use memcmp for == on bit integer types
+function =={T<:BitInteger,N}(a::Array{T,N}, b::Array{T,N})
+    size(a) == size(b) && 0 == ccall(
+        :memcmp, Int32, (Ptr{T}, Ptr{T}, UInt), a, b, sizeof(T) * length(a))
+end
+
+# this is ~20% faster than the generic implementation above for very small arrays
+function =={T<:BitInteger}(a::Array{T,1}, b::Array{T,1})
+    len = length(a)
+    len == length(b) && 0 == ccall(
+        :memcmp, Int32, (Ptr{T}, Ptr{T}, UInt), a, b, sizeof(T) * len)
+end
+
 function reverse(A::AbstractVector, s=1, n=length(A))
     B = similar(A)
     for i = 1:s-1
@@ -968,6 +981,8 @@ function vcat{T}(arrays::Vector{T}...)
     end
     return arr
 end
+
+cat(n::Integer, x::Integer...) = reshape([x...], (ntuple(x->1, n-1)..., length(x)))
 
 
 ## find ##
@@ -1413,12 +1428,21 @@ end
 """
     findmax(itr) -> (x, index)
 
-Returns the maximum element and its index.
+Returns the maximum element of the collection `itr` and its index. If there are multiple
+maximal elements, then the first one will be returned. `NaN` values are ignored, unless
+all elements are `NaN`.
+
 The collection must not be empty.
 
 ```jldoctest
 julia> findmax([8,0.1,-9,pi])
 (8.0,1)
+
+julia> findmax([1,7,7,6])
+(7,2)
+
+julia> findmax([1,7,7,NaN])
+(7.0,2)
 ```
 """
 function findmax(a)
@@ -1442,12 +1466,21 @@ end
 """
     findmin(itr) -> (x, index)
 
-Returns the minimum element and its index.
+Returns the minimum element of the collection `itr` and its index. If there are multiple
+minimal elements, then the first one will be returned. `NaN` values are ignored, unless
+all elements are `NaN`.
+
 The collection must not be empty.
 
 ```jldoctest
 julia> findmin([8,0.1,-9,pi])
 (-9.0,3)
+
+julia> findmin([7,1,1,6])
+(1,2)
+
+julia> findmin([7,1,1,NaN])
+(1.0,2)
 ```
 """
 function findmin(a)
@@ -1471,12 +1504,21 @@ end
 """
     indmax(itr) -> Integer
 
-Returns the index of the maximum element in a collection.
+Returns the index of the maximum element in a collection. If there are multiple maximal
+elements, then the first one will be returned. `NaN` values are ignored, unless all
+elements are `NaN`.
+
 The collection must not be empty.
 
 ```jldoctest
 julia> indmax([8,0.1,-9,pi])
 1
+
+julia> indmax([1,7,7,6])
+2
+
+julia> indmax([1,7,7,NaN])
+2
 ```
 """
 indmax(a) = findmax(a)[2]
@@ -1484,12 +1526,21 @@ indmax(a) = findmax(a)[2]
 """
     indmin(itr) -> Integer
 
-Returns the index of the minimum element in a collection.
+Returns the index of the minimum element in a collection. If there are multiple minimal
+elements, then the first one will be returned. `NaN` values are ignored, unless all
+elements are `NaN`.
+
 The collection must not be empty.
 
 ```jldoctest
 julia> indmin([8,0.1,-9,pi])
 3
+
+julia> indmin([7,1,1,6])
+2
+
+julia> indmin([7,1,1,NaN])
+2
 ```
 """
 indmin(a) = findmin(a)[2]
@@ -1588,7 +1639,25 @@ end
 
 ## Filter ##
 
-# given a function returning a boolean and an array, return matching elements
+"""
+    filter(function, collection)
+
+Return a copy of `collection`, removing elements for which `function` is `false`. For
+associative collections, the function is passed two arguments (key and value).
+
+```jldocttest
+julia> a = 1:10
+1:10
+
+julia> filter(isodd, a)
+5-element Array{Int64,1}:
+ 1
+ 3
+ 5
+ 7
+ 9
+```
+"""
 filter(f, As::AbstractArray) = As[map(f, As)::AbstractArray{Bool}]
 
 function filter!(f, a::Vector)

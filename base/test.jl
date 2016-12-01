@@ -765,9 +765,9 @@ function testset_forloop(args, testloop)
             pop_testset()
             push!(arr, finish(ts))
         end
-        first_iteration = false
         ts = $(testsettype)($desc; $options...)
         push_testset(ts)
+        first_iteration = false
         try
             $(esc(tests))
         catch err
@@ -978,26 +978,28 @@ macro inferred(ex)
     Meta.isexpr(ex, :call)|| error("@inferred requires a call expression")
 
     Base.remove_linenums!(quote
-        $(if any(a->(Meta.isexpr(a, :kw) || Meta.isexpr(a, :parameters)), ex.args)
-            # Has keywords
-            args = gensym()
-            kwargs = gensym()
-            quote
-                $(esc(args)), $(esc(kwargs)), result = $(esc(Expr(:call, _args_and_call, ex.args[2:end]..., ex.args[1])))
-                inftypes = $(Base.gen_call_with_extracted_types(Base.return_types, :($(ex.args[1])($(args)...; $(kwargs)...))))
-            end
-        else
-            # No keywords
-            quote
-                args = ($([esc(ex.args[i]) for i = 2:length(ex.args)]...),)
-                result = $(esc(ex.args[1]))(args...)
-                inftypes = Base.return_types($(esc(ex.args[1])), Base.typesof(args...))
-            end
-        end)
-        @assert length(inftypes) == 1
-        rettype = isa(result, Type) ? Type{result} : typeof(result)
-        rettype == inftypes[1] || error("return type $rettype does not match inferred return type $(inftypes[1])")
-        result
+        let
+            $(if any(a->(Meta.isexpr(a, :kw) || Meta.isexpr(a, :parameters)), ex.args)
+                # Has keywords
+                args = gensym()
+                kwargs = gensym()
+                quote
+                    $(esc(args)), $(esc(kwargs)), result = $(esc(Expr(:call, _args_and_call, ex.args[2:end]..., ex.args[1])))
+                    inftypes = $(Base.gen_call_with_extracted_types(Base.return_types, :($(ex.args[1])($(args)...; $(kwargs)...))))
+                end
+            else
+                # No keywords
+                quote
+                    args = ($([esc(ex.args[i]) for i = 2:length(ex.args)]...),)
+                    result = $(esc(ex.args[1]))(args...)
+                    inftypes = Base.return_types($(esc(ex.args[1])), Base.typesof(args...))
+                end
+            end)
+            @assert length(inftypes) == 1
+            rettype = isa(result, Type) ? Type{result} : typeof(result)
+            rettype == inftypes[1] || error("return type $rettype does not match inferred return type $(inftypes[1])")
+            result
+        end
     end)
 end
 

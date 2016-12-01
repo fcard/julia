@@ -2,7 +2,7 @@
 
 module Sort
 
-using Base: Order, Checked, copymutable, linearindices, linearindexing, viewindexing, LinearFast
+using Base: Order, Checked, copymutable, linearindices, linearindexing, viewindexing, LinearFast, _length
 
 import
     Base.sort,
@@ -66,7 +66,8 @@ issorted(itr;
     issorted(itr, ord(lt,by,rev,order))
 
 function select!(v::AbstractVector, k::Union{Int,OrdinalRange}, o::Ordering)
-    sort!(v, 1, length(v), PartialQuickSort(k), o)
+    inds = indices(v, 1)
+    sort!(v, first(inds), last(inds), PartialQuickSort(k), o)
     v[k]
 end
 select!(v::AbstractVector, k::Union{Int,OrdinalRange};
@@ -167,18 +168,24 @@ function searchsortedfirst{T<:Integer}(a::Range{T}, x::Real, o::DirectOrdering)
 end
 
 function searchsortedfirst{T<:Integer}(a::Range{T}, x::Unsigned, o::DirectOrdering)
-    if step(a) == 0
-        lt(o, first(a), x) ? length(a) + 1 : 1
+    if lt(o, first(a), x)
+        if step(a) == 0
+            length(a) + 1
+        else
+            min(cld(x - first(a), step(a)), length(a)) + 1
+        end
     else
-        clamp(-fld(first(a) - signed(x), step(a)) + 1, 1, length(a) + 1)
+        1
     end
 end
 
 function searchsortedlast{T<:Integer}(a::Range{T}, x::Unsigned, o::DirectOrdering)
-    if step(a) == 0
-        lt(o, x, first(a)) ? 0 : length(a)
+    if lt(o, x, first(a))
+        0
+    elseif step(a) == 0
+        length(a)
     else
-        clamp( fld(signed(x) - first(a), step(a)) + 1, 0, length(a))
+        min(fld(x - first(a), step(a)) + 1, length(a))
     end
 end
 
@@ -187,7 +194,7 @@ searchsorted{T<:Real}(a::Range{T}, x::Real, o::DirectOrdering) =
 
 for s in [:searchsortedfirst, :searchsortedlast, :searchsorted]
     @eval begin
-        $s(v::AbstractVector, x, o::Ordering) = $s(v,x,1,length(v),o)
+        $s(v::AbstractVector, x, o::Ordering) = (inds = indices(v, 1); $s(v,x,first(inds),last(inds),o))
         $s(v::AbstractVector, x;
            lt=isless, by=identity, rev::Bool=false, order::Ordering=Forward) =
             $s(v,x,ord(lt,by,rev,order))
@@ -432,7 +439,7 @@ function sort!(v::AbstractVector;
                order::Ordering=Forward)
     ordr = ord(lt,by,rev,order)
     if ordr === Forward && isa(v,Vector) && eltype(v)<:Integer
-        n = length(v)
+        n = _length(v)
         if n > 1
             min, max = extrema(v)
             (diff, o1) = sub_with_overflow(max, min)
@@ -478,7 +485,7 @@ sort(v::AbstractVector; kws...) = sort!(copymutable(v); kws...)
 ## selectperm: the permutation to sort the first k elements of an array ##
 
 selectperm(v::AbstractVector, k::Union{Integer,OrdinalRange}; kwargs...) =
-    selectperm!(Vector{eltype(k)}(length(v)), v, k; kwargs..., initialized=false)
+    selectperm!(similar(Vector{eltype(k)}, indices(v,1)), v, k; kwargs..., initialized=false)
 
 function selectperm!{I<:Integer}(ix::AbstractVector{I}, v::AbstractVector,
                                  k::Union{Int, OrdinalRange};
@@ -521,7 +528,7 @@ function sortperm(v::AbstractVector;
                   order::Ordering=Forward)
     ordr = ord(lt,by,rev,order)
     if ordr === Forward && isa(v,Vector) && eltype(v)<:Integer
-        n = length(v)
+        n = _length(v)
         if n > 1
             min, max = extrema(v)
             (diff, o1) = sub_with_overflow(max, min)
@@ -553,7 +560,7 @@ function sortperm!{I<:Integer}(x::AbstractVector{I}, v::AbstractVector;
                                order::Ordering=Forward,
                                initialized::Bool=false)
     if indices(x,1) != indices(v,1)
-        throw(ArgumentError("index vector must be the same length as the source vector, $(indices(x,1)) != $(indices(v,1))"))
+        throw(ArgumentError("index vector must have the same indices as the source vector, $(indices(x,1)) != $(indices(v,1))"))
     end
     if !initialized
         @inbounds for i = indices(v,1)

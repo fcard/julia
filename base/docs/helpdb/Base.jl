@@ -53,14 +53,6 @@ Compute the inverse sine of `x`, where the output is in radians.
 asin
 
 """
-    takebuf_array(b::IOBuffer)
-
-Obtain the contents of an `IOBuffer` as an array, without copying. Afterwards, the
-`IOBuffer` is reset to its initial state.
-"""
-takebuf_array
-
-"""
     pointer(array [, index])
 
 Get the native address of an array or string element. Be careful to ensure that a Julia
@@ -196,15 +188,6 @@ Unary minus operator.
 Subtraction operator.
 """
 -(x, y)
-
-"""
-    Nullable(x)
-
-Wrap value `x` in an object of type `Nullable`, which indicates whether a value is present.
-`Nullable(x)` yields a non-empty wrapper, and `Nullable{T}()` yields an empty instance of a
-wrapper that might contain a value of type `T`.
-"""
-Nullable
 
 """
     bits(n)
@@ -491,7 +474,7 @@ If `T` is not a bitstype, an error is thrown.
 ```jldoctest
 julia> sizeof(Base.LinAlg.LU)
 ERROR: argument is an abstract type; size is indeterminate
- in sizeof(::Type{T}) at ./essentials.jl:89
+ in sizeof(::Type{T}) at ./essentials.jl:99
  ...
 ```
 """
@@ -782,13 +765,6 @@ Sum elements of `A` over the singleton dimensions of `r`, and write results to `
 sum!
 
 """
-    parentindexes(A)
-
-From an array view `A`, returns the corresponding indexes in the parent.
-"""
-parentindexes
-
-"""
     display(x)
     display(d::Display, x)
     display(mime, x)
@@ -869,16 +845,6 @@ julia> num2hex(2.2)
 num2hex
 
 """
-    displayable(mime) -> Bool
-    displayable(d::Display, mime) -> Bool
-
-Returns a boolean value indicating whether the given `mime` type (string) is displayable by
-any of the displays in the current display stack, or specifically by the display `d` in the
-second variant.
-"""
-displayable
-
-"""
     truncate(file,n)
 
 Resize the file or buffer given by the first argument to exactly `n` bytes, filling
@@ -942,31 +908,6 @@ creating a new stream.
 accept
 
 """
-    readstring(stream::IO)
-    readstring(filename::AbstractString)
-
-Read the entire contents of an I/O stream or a file as a string.
-The text is assumed to be encoded in UTF-8.
-"""
-readstring
-
-"""
-    eachline(stream::IO)
-    eachline(filename::AbstractString)
-
-Create an iterable object that will yield each line from an I/O stream or a file.
-The text is assumed to be encoded in UTF-8.
-"""
-eachline
-
-"""
-    complex(r, [i])
-
-Convert real numbers or arrays to complex. `i` defaults to zero.
-"""
-complex
-
-"""
     Mmap.Anonymous(name, readonly, create)
 
 Create an `IO`-like object for creating zeroed-out mmapped-memory that is not tied to a file
@@ -1014,13 +955,6 @@ reverse
 In-place version of [`reverse`](:func:`reverse`).
 """
 reverse!
-
-"""
-    num(x)
-
-Numerator of the rational representation of `x`.
-"""
-num
 
 """
     .<(x, y)
@@ -1198,7 +1132,7 @@ prod(A, dims)
 """
     log1p(x)
 
-Accurate natural logarithm of `1+x`. Throws `DomainError` for `Real` arguments less than -1.
+Accurate natural logarithm of `1+x`. Throws [`DomainError`](:obj:`DomainError`) for `Real` arguments less than -1.
 
 There is an experimental variant in the `Base.Math.JuliaLibm` module, which is typically
 faster and more accurate.
@@ -1305,7 +1239,7 @@ typeof
 """
     log(x)
 
-Compute the natural logarithm of `x`. Throws `DomainError` for negative `Real` arguments.
+Compute the natural logarithm of `x`. Throws [`DomainError`](:obj:`DomainError`) for negative `Real` arguments.
 Use complex negative arguments to obtain complex results.
 
 There is an experimental variant in the `Base.Math.JuliaLibm` module, which is typically
@@ -1424,19 +1358,6 @@ julia> endof([1,2,4])
 endof
 
 """
-    Channel{T}(sz::Int)
-
-Constructs a `Channel` that can hold a maximum of `sz` objects of type `T`. `put!` calls on
-a full channel block till an object is removed with `take!`.
-
-Other constructors:
-
-- `Channel()` - equivalent to `Channel{Any}(32)`
-- `Channel(sz::Int)` equivalent to `Channel{Any}(sz)`
-"""
-Channel
-
-"""
     next(iter, state) -> item, state
 
 For a given iterable object and iteration state, return the current item and the next iteration state.
@@ -1446,7 +1367,7 @@ next
 """
     log2(x)
 
-Compute the logarithm of `x` to base 2. Throws `DomainError` for negative `Real` arguments.
+Compute the logarithm of `x` to base 2. Throws [`DomainError`](:obj:`DomainError`) for negative `Real` arguments.
 
 ```jldoctest
 julia> log2(4)
@@ -1620,18 +1541,6 @@ write results to `r`.
 sumabs2!
 
 """
-    @sprintf("%Fmt", args...)
-
-Return `@printf` formatted output as string.
-
-    julia> s = @sprintf "this is a %s %15.1f" "test" 34.567;
-
-    julia> println(s)
-    this is a test            34.6
-"""
-:@sprintf
-
-"""
     tanh(x)
 
 Compute hyperbolic tangent of `x`.
@@ -1759,16 +1668,6 @@ julia> minimum(A, 2)
 ```
 """
 minimum(A,dims)
-
-"""
-    view(A, inds...)
-
-Like [`getindex`](:func:`getindex`), but returns a view into the parent array `A` with the
-given indices instead of making a copy.  Calling [`getindex`](:func:`getindex`) or
-[`setindex!`](:func:`setindex!`) on the returned [`SubArray`](:obj:`SubArray`) computes the
-indices to the parent array on the fly without checking bounds.
-"""
-view
 
 """
     cot(x)
@@ -2192,21 +2091,9 @@ and then the complex square root of the triangular factor.
 sqrtm
 
 """
-    unsafe_store!(p::Ptr{T}, x, [i::Integer=1])
-
-Store a value of type `T` to the address of the ith element (1-indexed) starting at `p`.
-This is equivalent to the C expression `p[i-1] = x`.
-
-The `unsafe` prefix on this function indicates that no validation is performed on the
-pointer `p` to ensure that it is valid. Incorrect usage may corrupt or segfault your
-program, in the same manner as C.
-"""
-unsafe_store!
-
-"""
     readcsv(source, [T::Type]; options...)
 
-Equivalent to `readdlm` with `delim` set to comma, and type optionally defined by `T`.
+Equivalent to [`readdlm`](:func:`readdlm`) with `delim` set to comma, and type optionally defined by `T`.
 """
 readcsv
 
@@ -2427,24 +2314,6 @@ Assign `x` to a named field in `value` of composite type. The syntax `a.b = c` c
 setfield!
 
 """
-    @printf([io::IOStream], "%Fmt", args...)
-
-Print `args` using C `printf()` style format specification string.
-Optionally, an [`IOStream`](:obj:`IOStream`)
-may be passed as the first argument to redirect output.
-"""
-:@printf
-
-"""
-    countlines(io,[eol::Char])
-
-Read `io` until the end of the stream/file and count the number of lines. To specify a file
-pass the filename as the first argument. EOL markers other than '\\n' are supported by
-passing them as the second argument.
-"""
-countlines
-
-"""
     .\\(x, y)
 
 Element-wise left division operator.
@@ -2505,15 +2374,6 @@ Base.:(*)(x, y...)
 Get the system time in seconds since the epoch, with fairly high (typically, microsecond) resolution.
 """
 time()
-
-"""
-    TextDisplay(stream)
-
-Returns a `TextDisplay <: Display`, which can display any object as the text/plain MIME type
-(only), writing the text representation to the given I/O stream. (The text representation is
-the same as the way an object is printed in the Julia REPL.)
-"""
-TextDisplay
 
 """
     ismatch(r::Regex, s::AbstractString) -> Bool
@@ -2668,13 +2528,6 @@ The process was stopped by a terminal interrupt (CTRL+C).
 InterruptException
 
 """
-    den(x)
-
-Denominator of the rational representation of `x`.
-"""
-den
-
-"""
     issubnormal(f) -> Bool
 
 Test whether a floating point number is subnormal.
@@ -2761,15 +2614,6 @@ Similar to [`show`](:func:`show`), except shows all elements of arrays.
 showall
 
 """
-    mimewritable(mime, x)
-
-Returns a boolean value indicating whether or not the object `x` can be written as the given
-`mime` type. (By default, this is determined automatically by the existence of the
-corresponding [`show`](:func:`show`) function for `typeof(x)`.)
-"""
-mimewritable
-
-"""
     match(r::Regex, s::AbstractString[, idx::Integer[, addopts]])
 
 Search for the first match of the regular expression `r` in `s` and return a `RegexMatch`
@@ -2807,18 +2651,6 @@ readavailable
 Determine whether `x` is of the given `type`.
 """
 isa
-
-"""
-    unsafe_load(p::Ptr{T}, [i::Integer=1])
-
-Load a value of type `T` from the address of the ith element (1-indexed) starting at `p`.
-This is equivalent to the C expression `p[i-1]`.
-
-The `unsafe` prefix on this function indicates that no validation is performed on the
-pointer `p` to ensure that it is valid. Incorrect usage may segfault your program or return
-garbage answers, in the same manner as C.
-"""
-unsafe_load
 
 """
     catch_backtrace()
@@ -2863,7 +2695,7 @@ julia> convert(Int, 3.0)
 
 julia> convert(Int, 3.5)
 ERROR: InexactError()
- in convert(::Type{Int64}, ::Float64) at ./int.jl:330
+ in convert(::Type{Int64}, ::Float64) at ./float.jl:656
  ...
 ```
 
@@ -2962,15 +2794,6 @@ elements to make rows and columns moreequal in norm. The default is `true` for b
 options.
 """
 eigvals
-
-"""
-    pointer_from_objref(object_instance)
-
-Get the memory address of a Julia object as a `Ptr`. The existence of the resulting `Ptr`
-will not protect the object from garbage collection, so you must ensure that the object
-remains referenced for the whole time that the `Ptr` will be used.
-"""
-pointer_from_objref
 
 """
     copy!(dest, src)
@@ -3171,14 +2994,6 @@ Given an index `i` in `reverse(v)`, return the corresponding index in `v` so tha
 Unicode string.)
 """
 reverseind
-
-"""
-    float(x)
-
-Convert a number, array, or string to a `AbstractFloat` data type. For numeric data, the
-smallest suitable `AbstractFloat` type is used. Converts strings to `Float64`.
-"""
-float
 
 """
     signbit(x)
@@ -3395,15 +3210,6 @@ Integer division was attempted with a denominator value of 0.
 DivideError
 
 """
-    unsafe_pointer_to_objref(p::Ptr)
-
-Convert a `Ptr` to an object reference. Assumes the pointer refers to a valid heap-allocated
-Julia object. If this is not the case, undefined behavior results, hence this function is
-considered "unsafe" and should be used with care.
-"""
-unsafe_pointer_to_objref
-
-"""
     dawson(x)
 
 Compute the Dawson function (scaled imaginary error function) of `x`, defined by
@@ -3412,8 +3218,17 @@ Compute the Dawson function (scaled imaginary error function) of `x`, defined by
 dawson
 
 """
-    \$(x, y)
+    xor(x, y)
+    ⊻(x, y)
 
 Bitwise exclusive or.
+
+```jldoctest
+julia> [true; true; false] ⊻ [true; false; false]
+3-element Array{Bool,1}:
+ false
+  true
+ false
+```
 """
-Base.:$(x, y)
+Base.xor(x, y)

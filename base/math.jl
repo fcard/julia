@@ -163,7 +163,7 @@ log{T<:Number}(b::T, x::T) = log(x)/log(b)
 """
     log(b,x)
 
-Compute the base `b` logarithm of `x`. Throws `DomainError` for negative `Real` arguments.
+Compute the base `b` logarithm of `x`. Throws [`DomainError`](:obj:`DomainError`) for negative `Real` arguments.
 
 ```jldoctest
 julia> log(4,8)
@@ -174,7 +174,7 @@ julia> log(4,2)
 ```
 
 !!! note
-    If `b` is a power of 2 or 10, `log2` or `log10` should be used, as these will
+    If `b` is a power of 2 or 10, [`log2`](:func:`log2`) or [`log10`](:func:`log10`) should be used, as these will
     typically be faster and more accurate. For example,
 
     ```jldoctest
@@ -272,7 +272,7 @@ sqrt(x::Float32) = box(Float32,sqrt_llvm(unbox(Float32,x)))
 """
     sqrt(x)
 
-Return ``\\sqrt{x}``. Throws `DomainError` for negative `Real` arguments. Use complex
+Return ``\\sqrt{x}``. Throws [`DomainError`](:obj:`DomainError`) for negative `Real` arguments. Use complex
 negative arguments instead.  The prefix operator `√` is equivalent to `sqrt`.
 """
 sqrt(x::Real) = sqrt(float(x))
@@ -393,10 +393,10 @@ function significand{T<:AbstractFloat}(x::T)
     if xe == 0 # x is subnormal
         x == 0 && return x
         xs = xu & sign_mask(T)
-        xu $= xs
+        xu ⊻= xs
         m = leading_zeros(xu)-exponent_bits(T)
         xu <<= m
-        xu $= xs
+        xu ⊻= xs
     elseif xe == exponent_mask(T) # NaN or Inf
         return x
     end
@@ -411,23 +411,20 @@ Return `(x,exp)` such that `x` has a magnitude in the interval ``[1/2, 1)`` or 0
 and `val` is equal to ``x \\times 2^{exp}``.
 """
 function frexp{T<:AbstractFloat}(x::T)
-    xu = reinterpret(Unsigned,x)
-    xe = xu & exponent_mask(T)
-    k = Int(xe >> significand_bits(T))
-    if xe == 0 # x is subnormal
-        x == 0 && return x, 0
-        xs = xu & sign_mask(T)
-        xu $= xs
-        m = leading_zeros(xu)-exponent_bits(T)
-        xu <<= m
-        xu $= xs
-        k = 1-m
-    elseif xe == exponent_mask(T) # NaN or Inf
-        return x,0
+    xu = reinterpret(Unsigned, x)
+    xs = xu & ~sign_mask(T)
+    xs >= exponent_mask(T) && return x, 0 # NaN or Inf
+    k = Int(xs >> significand_bits(T))
+    if xs <= (~exponent_mask(T) & ~sign_mask(T)) # x is subnormal
+        xs == 0 && return x, 0 # +-0
+        m = unsigned(leading_zeros(xs) - exponent_bits(T))
+        xs <<= m
+        xu = xs ⊻ (xu & sign_mask(T))
+        k = 1 - signed(m)
     end
-    k -= (exponent_bias(T)-1)
+    k -= (exponent_bias(T) - 1)
     xu = (xu & ~exponent_mask(T)) | exponent_half(T)
-    reinterpret(T,xu), k
+    return reinterpret(T, xu), k
 end
 
 function frexp{T<:AbstractFloat}(A::Array{T})

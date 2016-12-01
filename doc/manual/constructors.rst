@@ -238,13 +238,13 @@ are, in fact, self-referential:
 
     julia> x = SelfReferential();
 
-    julia> is(x, x)
+    julia> x === x
     true
 
-    julia> is(x, x.obj)
+    julia> x === x.obj
     true
 
-    julia> is(x, x.obj.obj)
+    julia> x === x.obj.obj
     true
 
 Although it is generally a good idea to return a fully initialized
@@ -328,7 +328,7 @@ types of the arguments given to the constructor. Here are some examples:
     ERROR: MethodError: no method matching Point{T<:Real}(::Int64, ::Float64)
     Closest candidates are:
       Point{T<:Real}{T<:Real}(::T<:Real, !Matched::T<:Real) at none:2
-      Point{T<:Real}{T}(::Any) at sysimg.jl:53
+      Point{T<:Real}{T}(::Any) at sysimg.jl:66
      ...
 
     ## explicit T ##
@@ -338,6 +338,7 @@ types of the arguments given to the constructor. Here are some examples:
 
     julia> Point{Int64}(1.0,2.5)
     ERROR: InexactError()
+     in convert(::Type{Int64}, ::Float64) at ./float.jl:656
      in Point{Int64}(::Float64, ::Float64) at ./none:2
      ...
 
@@ -427,7 +428,7 @@ However, other similar calls still don't work:
     ERROR: MethodError: no method matching Point{T<:Real}(::Float64, ::Int64)
     Closest candidates are:
       Point{T<:Real}{T<:Real}(::T<:Real, !Matched::T<:Real) at none:2
-      Point{T<:Real}{T}(::Any) at sysimg.jl:53
+      Point{T<:Real}{T}(::Any) at sysimg.jl:66
      ...
 
 For a much more general way of making all such calls work sensibly, see

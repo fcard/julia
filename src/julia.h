@@ -1584,9 +1584,7 @@ JL_DLLEXPORT int jl_tcp_bind(uv_tcp_t *handle, uint16_t port, uint32_t host,
 
 JL_DLLEXPORT int jl_sizeof_ios_t(void);
 
-JL_DLLEXPORT jl_array_t *jl_takebuf_array(ios_t *s);
-JL_DLLEXPORT jl_value_t *jl_takebuf_string(ios_t *s);
-JL_DLLEXPORT void *jl_takebuf_raw(ios_t *s);
+JL_DLLEXPORT jl_array_t *jl_take_buffer(ios_t *s);
 JL_DLLEXPORT jl_value_t *jl_readuntil(ios_t *s, uint8_t delim);
 
 typedef struct {
@@ -1753,6 +1751,22 @@ typedef struct {
 #define jl_root_task (jl_get_ptls_states()->root_task)
 #define jl_exception_in_transit (jl_get_ptls_states()->exception_in_transit)
 #define jl_task_arg_in_transit (jl_get_ptls_states()->task_arg_in_transit)
+
+
+// codegen interface ----------------------------------------------------------
+
+typedef struct {
+    int cached;             // can the compiler use/populate the compilation cache?
+
+    // language features (C-style integer booleans)
+    int runtime;            // can we call into the runtime?
+    int exceptions;         // are exceptions supported (requires runtime)?
+    int track_allocations;  // can we track allocations (don't if disallowed)?
+    int code_coverage;      // can we measure coverage (don't if disallowed)?
+    int static_alloc;       // is the compiler allowed to allocate statically?
+    int dynamic_alloc;      // is the compiler allowed to allocate dynamically (requires runtime)?
+} jl_cgparams_t;
+extern JL_DLLEXPORT jl_cgparams_t jl_default_cgparams;
 
 #ifdef __cplusplus
 }

@@ -3,6 +3,34 @@
 immutable NullException <: Exception
 end
 
+"""
+    Nullable(x, hasvalue::Bool=true)
+
+Wrap value `x` in an object of type `Nullable`, which indicates whether a value is present.
+`Nullable(x)` yields a non-empty wrapper and `Nullable{T}()` yields an empty instance of a
+wrapper that might contain a value of type `T`.
+
+`Nullable(x, false)` yields `Nullable{typeof(x)}()` with `x` stored in the result's `value`
+field.
+
+# Examples
+
+```jldoctest
+julia> Nullable(1)
+Nullable{Int64}(1)
+
+julia> Nullable{Int64}()
+Nullable{Int64}()
+
+julia> Nullable(1, false)
+Nullable{Int64}()
+
+julia> dump(Nullable(1, false))
+Nullable{Int64}
+  hasvalue: Bool false
+  value: Int64 1
+```
+"""
 Nullable{T}(value::T, hasvalue::Bool=true) = Nullable{T}(value, hasvalue)
 Nullable() = Nullable{Union{}}()
 
@@ -26,6 +54,7 @@ convert(   ::Type{Nullable   }, ::Void) = Nullable{Union{}}()
 promote_rule{S,T}(::Type{Nullable{S}}, ::Type{T}) = Nullable{promote_type(S, T)}
 promote_rule{S,T}(::Type{Nullable{S}}, ::Type{Nullable{T}}) = Nullable{promote_type(S, T)}
 promote_op{S,T}(op::Any, ::Type{Nullable{S}}, ::Type{Nullable{T}}) = Nullable{promote_op(op, S, T)}
+promote_op{S,T}(op::Type, ::Type{Nullable{S}}, ::Type{Nullable{T}}) = Nullable{promote_op(op, S, T)}
 
 function show{T}(io::IO, x::Nullable{T})
     if get(io, :compact, false)
@@ -82,7 +111,8 @@ Nullable{String}()
 
 julia> unsafe_get(x)
 ERROR: UndefRefError: access to undefined reference
- in unsafe_get(::Nullable{String}) at ./REPL[4]:1
+ in unsafe_get(::Nullable{String}) at ./nullable.jl:124
+ ...
 
 julia> x = 1
 1
@@ -100,18 +130,20 @@ unsafe_get(x) = x
 Return whether or not `x` is null for [`Nullable`](:obj:`Nullable`) `x`; return
 `false` for all other `x`.
 
+# Examples
+
 ```jldoctest
 julia> x = Nullable(1, false)
-Nullable{Int64}(1)
-
-julia> isnull(x)
-false
-
-julia> x = Nullable(1, true)
 Nullable{Int64}()
 
 julia> isnull(x)
 true
+
+julia> x = Nullable(1, true)
+Nullable{Int64}(1)
+
+julia> isnull(x)
+false
 
 julia> x = 1
 1

@@ -144,7 +144,7 @@ end
 
 r = 0.0:0.01:1.0
 @test (r[30] in r)
-r = (-4*Int64(maxintfloat(is(Int,Int32) ? Float32 : Float64))):5
+r = (-4*Int64(maxintfloat(Int === Int32 ? Float32 : Float64))):5
 @test (3 in r)
 @test (3.0 in r)
 
@@ -566,7 +566,7 @@ end
 # Issue #11245
 let io = IOBuffer()
     show(io, linspace(1, 2, 3))
-    str = takebuf_string(io)
+    str = String(take!(io))
     @test str == "linspace(1.0,2.0,3)"
 end
 
@@ -784,5 +784,5 @@ r2 = Base.OneTo(7)
 @test findin(2:length(r2)-1, r2) === 1:length(r2)-2
 io = IOBuffer()
 show(io, r)
-str = takebuf_string(io)
+str = String(take!(io))
 @test str == "Base.OneTo(3)"

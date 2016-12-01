@@ -26,7 +26,8 @@ hessfact{T<:BlasFloat}(A::StridedMatrix{T}) = hessfact!(copy(A))
 Compute the Hessenberg decomposition of `A` and return a `Hessenberg` object. If `F` is the
 factorization object, the unitary matrix can be accessed with `F[:Q]` and the Hessenberg
 matrix with `F[:H]`. When `Q` is extracted, the resulting type is the `HessenbergQ` object,
-and may be converted to a regular matrix with [`full`](:func:`full`).
+and may be converted to a regular matrix with [`convert(Array, _)`](:func:`convert`)
+ (or `Array(_)` for short).
 """
 function hessfact{T}(A::StridedMatrix{T})
     S = promote_type(Float32, typeof(one(T)/norm(one(T))))
@@ -61,11 +62,11 @@ end
 convert{T<:BlasFloat}(::Type{Matrix}, A::HessenbergQ{T}) = LAPACK.orghr!(1, size(A.factors, 1), copy(A.factors), A.τ)
 convert(::Type{Array}, A::HessenbergQ) = convert(Matrix, A)
 full(A::HessenbergQ) = convert(Array, A)
-convert(::Type{AbstractMatrix}, F::Hessenberg) = (fq = full(F[:Q]); (fq * F[:H]) * fq')
+convert(::Type{AbstractMatrix}, F::Hessenberg) = (fq = Array(F[:Q]); (fq * F[:H]) * fq')
 convert(::Type{AbstractArray}, F::Hessenberg) = convert(AbstractMatrix, F)
 convert(::Type{Matrix}, F::Hessenberg) = convert(Array, convert(AbstractArray, F))
 convert(::Type{Array}, F::Hessenberg) = convert(Matrix, F)
-full(F::Hessenberg) = convert(Array, F)
+full(F::Hessenberg) = convert(AbstractArray, F)
 
 A_mul_B!{T<:BlasFloat}(Q::HessenbergQ{T}, X::StridedVecOrMat{T}) =
     LAPACK.ormhr!('L', 'N', 1, size(Q.factors, 1), Q.factors, Q.τ, X)

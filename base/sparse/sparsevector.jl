@@ -2,7 +2,8 @@
 
 ### Common definitions
 
-import Base: scalarmax, scalarmin, sort, find, findnz
+import Base: scalarmax, scalarmin, sort, find, findnz, @_pure_meta
+import Base.LinAlg: promote_to_array_type, promote_to_arrays_
 
 ### The SparseVector
 
@@ -871,16 +872,16 @@ typealias _TypedDenseConcatGroup{T} Union{Vector{T}, Matrix{T}, _Annotated_Typed
 
 # Concatenations involving un/annotated sparse/special matrices/vectors should yield sparse arrays
 function cat(catdims, Xin::_SparseConcatGroup...)
-    X = SparseMatrixCSC[issparse(x) ? x : sparse(x) for x in Xin]
+    X = map(x -> SparseMatrixCSC(issparse(x) ? x : sparse(x)), Xin)
     T = promote_eltype(Xin...)
     Base.cat_t(catdims, T, X...)
 end
 function hcat(Xin::_SparseConcatGroup...)
-    X = SparseMatrixCSC[issparse(x) ? x : sparse(x) for x in Xin]
+    X = map(x -> SparseMatrixCSC(issparse(x) ? x : sparse(x)), Xin)
     hcat(X...)
 end
 function vcat(Xin::_SparseConcatGroup...)
-    X = SparseMatrixCSC[issparse(x) ? x : sparse(x) for x in Xin]
+    X = map(x -> SparseMatrixCSC(issparse(x) ? x : sparse(x)), Xin)
     vcat(X...)
 end
 function hvcat(rows::Tuple{Vararg{Int}}, X::_SparseConcatGroup...)
@@ -894,6 +895,11 @@ function hvcat(rows::Tuple{Vararg{Int}}, X::_SparseConcatGroup...)
     end
     vcat(tmp_rows...)
 end
+
+# make sure UniformScaling objects are converted to sparse matrices for concatenation
+promote_to_array_type(A::Tuple{Vararg{Union{_SparseConcatGroup,UniformScaling}}}) = (@_pure_meta; SparseMatrixCSC)
+promote_to_array_type(A::Tuple{Vararg{Union{_DenseConcatGroup,UniformScaling}}}) = (@_pure_meta; Matrix)
+promote_to_arrays_{T}(n::Int, ::Type{SparseMatrixCSC}, J::UniformScaling{T}) = sparse(J, n,n)
 
 # Concatenations strictly involving un/annotated dense matrices/vectors should yield dense arrays
 cat(catdims, xs::_DenseConcatGroup...) = Base.cat_t(catdims, promote_eltype(xs...), xs...)
@@ -1415,7 +1421,7 @@ function _spdot(f::Function,
 end
 
 function dot{Tx<:Number,Ty<:Number}(x::AbstractSparseVector{Tx}, y::AbstractSparseVector{Ty})
-    is(x, y) && return sumabs2(x)
+    x === y && return sumabs2(x)
     n = length(x)
     length(y) == n || throw(DimensionMismatch())
 

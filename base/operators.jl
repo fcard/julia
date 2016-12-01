@@ -100,7 +100,6 @@ generally not implement this, and rely on the fallback definition `!=(x,y) = !(x
 const ≠ = !=
 
 """
-    is(x, y) -> Bool
     ===(x,y) -> Bool
     ≡(x,y) -> Bool
 
@@ -108,16 +107,16 @@ Determine whether `x` and `y` are identical, in the sense that no program could 
 them. Compares mutable objects by address in memory, and compares immutable objects (such as
 numbers) by contents at the bit level. This function is sometimes called `egal`.
 """
-is
-const ≡ = is
+===
+const ≡ = ===
 
 """
     !==(x, y)
     ≢(x,y)
 
-Equivalent to `!is(x, y)`.
+Equivalent to `!(x === y)`.
 """
-!==(x,y) = !is(x,y)
+!==(x,y) = !(x===y)
 const ≢ = !==
 
 """
@@ -266,7 +265,9 @@ identity(x) = x
 *(x::Number) = x
 (&)(x::Integer) = x
 (|)(x::Integer) = x
-($)(x::Integer) = x
+xor(x::Integer) = x
+
+const ⊻ = xor
 
 # foldl for argument lists. expand recursively up to a point, then
 # switch to a loop. this allows small cases like `a+b+c+d` to be inlined
@@ -280,7 +281,7 @@ function afoldl(op,a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,qs...)
     y
 end
 
-for op in (:+, :*, :&, :|, :$, :min, :max, :kron)
+for op in (:+, :*, :&, :|, :xor, :min, :max, :kron)
     @eval begin
         # note: these definitions must not cause a dispatch loop when +(a,b) is
         # not defined, and must only try to call 2-argument definitions, so
@@ -866,7 +867,7 @@ to_index(i) = throw(ArgumentError("invalid index: $i"))
 
 to_indexes() = ()
 to_indexes(i1) = (to_index(i1),)
-to_indexes(i1, I...) = (to_index(i1), to_indexes(I...)...)
+to_indexes(i1, I...) = (@_inline_meta; (to_index(i1), to_indexes(I...)...))
 
 # Addition/subtraction of ranges
 for f in (:+, :-)
@@ -966,8 +967,11 @@ length(p::Pair) = 2
 
 convert{A,B}(::Type{Pair{A,B}}, x::Pair{A,B}) = x
 function convert{A,B}(::Type{Pair{A,B}}, x::Pair)
-    convert(A, x[1]) => convert(B, x[2])
+    Pair{A, B}(convert(A, x[1]), convert(B, x[2]))
 end
+
+promote_rule{A1, B1, A2, B2}(::Type{Pair{A1, B1}}, ::Type{Pair{A2, B2}}) =
+    Pair{promote_type(A1, A2), promote_type(B1, B2)}
 
 # some operators not defined yet
 global //, >:, <|, hcat, hvcat, ⋅, ×, ∈, ∉, ∋, ∌, ⊆, ⊈, ⊊, ∩, ∪, √, ∛
@@ -980,7 +984,7 @@ export
     !=,
     !==,
     ===,
-    $,
+    xor,
     %,
     .%,
     ÷,
@@ -1040,6 +1044,7 @@ export
     ∪,
     √,
     ∛,
+    ⊻,
     colon,
     hcat,
     vcat,
@@ -1049,10 +1054,10 @@ export
     transpose,
     ctranspose
 
-import ..this_module: !, !=, $, %, .%, ÷, .÷, &, *, +, -, .!=, .+, .-, .*, ./, .<, .<=, .==, .>,
+import ..this_module: !, !=, xor, %, .%, ÷, .÷, &, *, +, -, .!=, .+, .-, .*, ./, .<, .<=, .==, .>,
     .>=, .\, .^, /, //, <, <:, <<, <=, ==, >, >=, >>, .>>, .<<, >>>,
     <|, |>, \, ^, |, ~, !==, ===, >:, colon, hcat, vcat, hvcat, getindex, setindex!,
     transpose, ctranspose,
-    ≥, ≤, ≠, .≥, .≤, .≠, ⋅, ×, ∈, ∉, ∋, ∌, ⊆, ⊈, ⊊, ∩, ∪, √, ∛
+    ≥, ≤, ≠, .≥, .≤, .≠, ⋅, ×, ∈, ∉, ∋, ∌, ⊆, ⊈, ⊊, ∩, ∪, √, ∛, ⊻
 
 end

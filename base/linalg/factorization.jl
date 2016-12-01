@@ -16,6 +16,15 @@ macro assertnonsingular(A, info)
    :(($info)==0 ? $A : throw(SingularException($info)))
 end
 
+function logdet(F::Factorization)
+    d, s = logabsdet(F)
+    return d + log(s)
+end
+
+function det(F::Factorization)
+    d, s = logabsdet(F)
+    return exp(d)*s
+end
 
 ### General promotion rules
 convert{T}(::Type{Factorization{T}}, F::Factorization{T}) = F
@@ -30,8 +39,7 @@ function (\){T<:BlasReal}(F::Factorization{T}, B::VecOrMat{Complex{T}})
 end
 
 for (f1, f2) in ((:\, :A_ldiv_B!),
-                 (:Ac_ldiv_B, :Ac_ldiv_B!),
-                 (:At_ldiv_B, :At_ldiv_B!))
+                 (:Ac_ldiv_B, :Ac_ldiv_B!))
     @eval begin
         function $f1(F::Factorization, B::AbstractVecOrMat)
             TFB = typeof(one(eltype(F)) / one(eltype(B)))
@@ -47,6 +55,10 @@ for f in (:A_ldiv_B!, :Ac_ldiv_B!, :At_ldiv_B!)
     @eval $f(Y::AbstractVecOrMat, A::Factorization, B::AbstractVecOrMat) =
         $f(A, copy!(Y, B))
 end
+
+# fallback methods for transposed solves
+At_ldiv_B{T<:Real}(F::Factorization{T}, B::AbstractVecOrMat) = Ac_ldiv_B(F, B)
+At_ldiv_B(F::Factorization, B) = conj.(Ac_ldiv_B(F, conj.(B)))
 
 """
     A_ldiv_B!([Y,] A, B) -> Y

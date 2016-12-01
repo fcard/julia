@@ -80,7 +80,7 @@ some noteworthy differences that may trip up Julia users accustomed to MATLAB:
   ``A == B`` do not return an array of booleans. Instead, use ``A .== B``, and
   similarly for the other boolean operators like :obj:`<`, :obj:`>` and
   :obj:`!=`.
-- In Julia, the operators :obj:`&`, :obj:`|`, and :obj:`$` perform the bitwise
+- In Julia, the operators :obj:`&`, :obj:`|`, and :obj:`⊻` (:obj:`xor`) perform the bitwise
   operations equivalent to ``and``, ``or``, and ``xor`` respectively in MATLAB,
   and have precedence similar to Python's bitwise operators (unlike C). They
   can operate on scalars or element-wise across arrays and can be used to
@@ -133,16 +133,21 @@ noteworthy differences:
 - In Julia, not all data structures support logical indexing. Furthermore,
   logical indexing in Julia is supported only with vectors of length equal to
   the object being indexed. For example:
-  - In R, ``c(1, 2, 3, 4)[c(TRUE, FALSE)]`` is equivalent to ``c(1,3)``.
-  - In R, ``c(1, 2, 3, 4)[c(TRUE, FALSE, TRUE, FALSE)]`` is equivalent to ``c(1,3)``.
+  - In R, ``c(1, 2, 3, 4)[c(TRUE, FALSE)]`` is equivalent to ``c(1, 3)``.
+  - In R, ``c(1, 2, 3, 4)[c(TRUE, FALSE, TRUE, FALSE)]`` is equivalent to ``c(1, 3)``.
   - In Julia, ``[1, 2, 3, 4][[true, false]]`` throws a :exc:`BoundsError`.
   - In Julia, ``[1, 2, 3, 4][[true, false, true, false]]`` produces ``[1, 3]``.
 - Like many languages, Julia does not always allow operations on vectors of
   different lengths, unlike R where the vectors only need to share a common
-  index range.  For example, ``c(1,2,3,4) + c(1,2)`` is valid R but the
-  equivalent ``[1:4] + [1:2]`` will throw an error in Julia.
-- Julia's :func:`apply` takes the function first, then its arguments, unlike
-  ``lapply(<structure>, function, arg2, ...)`` in R.
+  index range.  For example, ``c(1, 2, 3, 4) + c(1, 2)`` is valid R but the
+  equivalent ``[1, 2, 3, 4] + [1, 2]`` will throw an error in Julia.
+- Julia's :func:`map` takes the function first, then its arguments, unlike
+  ``lapply(<structure>, function, ...)`` in R. Similarly Julia's equivalent of
+  ``apply(X, MARGIN, FUN, ...)`` in R is :func:`mapslices` where the function is the
+  first argument.
+- Multivariate apply in R, e.g. ``mapply(choose, 11:13, 1:3)``, can be written as
+  ``broadcast(binomial, 11:13, 1:3)`` in Julia. Equivalently Julia offers a shorter
+  dot syntax for vectorizing functions ``binomial.(11:13, 1:3)``.
 - Julia uses ``end`` to denote the end of conditional blocks, like ``if``,
   loop blocks, like ``while``/``for``, and functions. In lieu of the one-line
   ``if ( cond ) statement``, Julia allows statements of the form
@@ -244,16 +249,6 @@ noteworthy differences:
 Noteworthy differences from Python
 ----------------------------------
 
-- In Julia, a vector of vectors can automatically concatenate into a
-  one-dimensional vector *if* no explicit element type is specified. For example:
-
-  - In Julia, ``[1, [2, 3]]`` concatenates into ``[1, 2, 3]``, like in R.
-  - In Julia, ``Int[1, Int[2, 3]]`` will *not* concatenate, but instead throw an error.
-  - In Julia, ``Any[1, [2,3]]`` will *not* concatenate.
-  - In Julia, ``Vector{Int}[[1, 2], [3, 4]]`` will *not* concatenate, but
-    produces an object similar to Python's list of lists. This object is
-    *different* from a two-dimensional :obj:`Array` of :obj:`Int`\ s.
-
 - Julia requires ``end`` to end a block. Unlike Python, Julia has no ``pass``
   keyword.
 - In Julia, indexing of arrays, strings, etc. is 1-based not 0-based.
@@ -261,8 +256,6 @@ Noteworthy differences from Python
   ``a[2:3]`` in Julia is ``a[1:3]`` in Python.
 - Julia does not support negative indexes. In particular, the last element of a
   list or array is indexed with :obj:`end` in Julia, not ``-1`` as in Python.
-- Julia's list comprehensions do not support the optional ``if`` clause that
-  Python has.
 - Julia's ``for``, ``if``, ``while``, etc. blocks are terminated by the
   ``end`` keyword. Indentation level is not significant as it is in Python.
 - Julia has no line continuation syntax: if, at the end of a line, the input so
@@ -343,10 +336,10 @@ Noteworthy differences from C/C++
   ``;`` also has a different meaning within ``[ ]``, something to watch out for.
   ``;`` can be used to separate expressions on a single line, but are not strictly necessary in many cases,
   and are more an aid to readability.
-- In Julia, the operator :obj:`$` performs the bitwise XOR operation, i.e. :obj:`^`
+- In Julia, the operator :obj:`⊻` (:obj:`xor`) performs the bitwise XOR operation, i.e. :obj:`^`
   in C/C++.  Also, the bitwise operators do not have the same precedence as C/++,
   so parenthesis may be required.
-- Julia's :obj:`^` is exponentiation (pow), not bitwise XOR as in C/C++ (use :obj:`$` in Julia)
+- Julia's :obj:`^` is exponentiation (pow), not bitwise XOR as in C/C++ (use :obj:`⊻`, or :obj:`xor`, in Julia)
 - Julia has two right-shift operators, ``>>`` and ``>>>``.  ``>>>`` performs an arithmetic shift,
   ``>>`` always performs a logical shift, unlike C/C++,
   where the meaning of ``>>`` depends on the type of the value being shifted.

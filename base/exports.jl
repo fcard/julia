@@ -23,6 +23,7 @@ export
     Docs,
     Markdown,
     Threads,
+    Iterators,
 
 # Types
     AbstractChannel,
@@ -61,7 +62,6 @@ export
     Enumerate,
     Factorization,
     FileMonitor,
-    Filter,
     FloatRange,
     Future,
     Hermitian,
@@ -124,7 +124,6 @@ export
     VersionNumber,
     WeakKeyDict,
     WorkerConfig,
-    Zip,
 
 # Ccall types
     Cchar,
@@ -206,7 +205,8 @@ export
     !==,
     ≡,
     ≢,
-    $,
+    xor,
+    ⊻,
     %,
     ÷,
     &,
@@ -333,7 +333,7 @@ export
     csch,
     dawson,
     deg2rad,
-    den,
+    denominator,
     digamma,
     div,
     divrem,
@@ -401,7 +401,7 @@ export
     nextpow,
     nextpow2,
     nextprod,
-    num,
+    numerator,
     num2hex,
     one,
     powermod,
@@ -497,12 +497,12 @@ export
     colon,
     conj!,
     copy!,
-    cummax,
-    cummin,
     cumprod,
     cumprod!,
     cumsum,
     cumsum!,
+    accumulate,
+    accumulate!,
     cumsum_kbn,
     eachindex,
     extrema,
@@ -958,16 +958,11 @@ export
 
 # iteration
     done,
-    enumerate,
     next,
     start,
+
+    enumerate,  # re-exported from Iterators
     zip,
-    rest,
-    countfrom,
-    take,
-    drop,
-    cycle,
-    repeated,
 
 # object identity and equality
     copy,
@@ -1171,8 +1166,7 @@ export
     serialize,
     skip,
     skipchars,
-    takebuf_array,
-    takebuf_string,
+    take!,
     truncate,
     unmark,
     watch_file,
@@ -1205,6 +1199,7 @@ export
     remotecall,
     remotecall_fetch,
     remotecall_wait,
+    remote_do,
     rmprocs,
     take!,
     timedwait,

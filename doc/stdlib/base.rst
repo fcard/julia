@@ -68,13 +68,13 @@ Getting Around
 
    .. Docstring generated from Julia source
 
-   Edit a file or directory optionally providing a line number to edit the file at. Returns to the ``julia`` prompt when you quit the editor.
+   Edit a file or directory optionally providing a line number to edit the file at. Returns to the ``julia`` prompt when you quit the editor. The editor can be changed by setting ``JULIA_EDITOR``\ , ``VISUAL`` or ``EDITOR`` as an environmental variable.
 
 .. function:: edit(function, [types])
 
    .. Docstring generated from Julia source
 
-   Edit the definition of a function, optionally specifying a tuple of types to indicate which method to edit.
+   Edit the definition of a function, optionally specifying a tuple of types to indicate which method to edit. The editor can be changed by setting ``JULIA_EDITOR``\ , ``VISUAL`` or ``EDITOR`` as an environmental variable.
 
 .. function:: @edit
 
@@ -237,8 +237,7 @@ Getting Around
 All Objects
 -----------
 
-.. function:: is(x, y) -> Bool
-              ===(x,y) -> Bool
+.. function:: ===(x,y) -> Bool
               ≡(x,y) -> Bool
 
    .. Docstring generated from Julia source
@@ -382,7 +381,7 @@ All Objects
 
        julia> convert(Int, 3.5)
        ERROR: InexactError()
-        in convert(::Type{Int64}, ::Float64) at ./int.jl:330
+        in convert(::Type{Int64}, ::Float64) at ./float.jl:656
         ...
 
    If ``T`` is a :obj:`AbstractFloat` or :obj:`Rational` type, then it will return the closest value to ``x`` representable by ``T``\ .
@@ -509,7 +508,7 @@ Types
    .. doctest::
 
        julia> subtypes(Integer)
-       4-element Array{Any,1}:
+       4-element Array{DataType,1}:
         BigInt
         Bool
         Signed
@@ -565,7 +564,7 @@ Types
 
        julia> sizeof(Base.LinAlg.LU)
        ERROR: argument is an abstract type; size is indeterminate
-        in sizeof(::Type{T}) at ./essentials.jl:89
+        in sizeof(::Type{T}) at ./essentials.jl:99
         ...
 
 .. function:: eps(T)
@@ -816,11 +815,31 @@ Syntax
 Nullables
 ---------
 
-.. function:: Nullable(x)
+.. function:: Nullable(x, hasvalue::Bool=true)
 
    .. Docstring generated from Julia source
 
-   Wrap value ``x`` in an object of type ``Nullable``\ , which indicates whether a value is present. ``Nullable(x)`` yields a non-empty wrapper, and ``Nullable{T}()`` yields an empty instance of a wrapper that might contain a value of type ``T``\ .
+   Wrap value ``x`` in an object of type ``Nullable``\ , which indicates whether a value is present. ``Nullable(x)`` yields a non-empty wrapper and ``Nullable{T}()`` yields an empty instance of a wrapper that might contain a value of type ``T``\ .
+
+   ``Nullable(x, false)`` yields ``Nullable{typeof(x)}()`` with ``x`` stored in the result's ``value`` field.
+
+   **Examples**
+
+   .. doctest::
+
+       julia> Nullable(1)
+       Nullable{Int64}(1)
+
+       julia> Nullable{Int64}()
+       Nullable{Int64}()
+
+       julia> Nullable(1, false)
+       Nullable{Int64}()
+
+       julia> dump(Nullable(1, false))
+       Nullable{Int64}
+         hasvalue: Bool false
+         value: Int64 1
 
 .. function:: get(x::Nullable[, y])
 
@@ -834,19 +853,21 @@ Nullables
 
    Return whether or not ``x`` is null for :obj:`Nullable` ``x``\ ; return ``false`` for all other ``x``\ .
 
+   **Examples**
+
    .. doctest::
 
        julia> x = Nullable(1, false)
-       Nullable{Int64}(1)
-
-       julia> isnull(x)
-       false
-
-       julia> x = Nullable(1, true)
        Nullable{Int64}()
 
        julia> isnull(x)
        true
+
+       julia> x = Nullable(1, true)
+       Nullable{Int64}(1)
+
+       julia> isnull(x)
+       false
 
        julia> x = 1
        1
@@ -875,7 +896,8 @@ Nullables
 
        julia> unsafe_get(x)
        ERROR: UndefRefError: access to undefined reference
-        in unsafe_get(::Nullable{String}) at ./REPL[4]:1
+        in unsafe_get(::Nullable{String}) at ./nullable.jl:124
+        ...
 
        julia> x = 1
        1
@@ -1384,19 +1406,19 @@ Events
 
    .. Docstring generated from Julia source
 
-   Create a timer to call the given ``callback`` function. The ``callback`` is passed one argument, the timer object itself. The callback will be invoked after the specified initial ``delay``\ , and then repeating with the given ``repeat`` interval. If ``repeat`` is ``0``\ , the timer is only triggered once. Times are in seconds. A timer is stopped and has its resources freed by calling ``close`` on it.
+   Create a timer to call the given ``callback`` function. The ``callback`` is passed one argument, the timer object itself. The callback will be invoked after the specified initial ``delay``\ , and then repeating with the given ``repeat`` interval. If ``repeat`` is ``0``\ , the timer is only triggered once. Times are in seconds. A timer is stopped and has its resources freed by calling :func:`close` on it.
 
 .. function:: Timer(delay, repeat=0)
 
    .. Docstring generated from Julia source
 
-   Create a timer that wakes up tasks waiting for it (by calling ``wait`` on the timer object) at a specified interval.  Times are in seconds.  Waiting tasks are woken with an error when the timer is closed (by ``close``\ ). Use ``isopen`` to check whether a timer is still active.
+   Create a timer that wakes up tasks waiting for it (by calling :func:`wait` on the timer object) at a specified interval.  Times are in seconds.  Waiting tasks are woken with an error when the timer is closed (by :func:`close`\ . Use :func:`isopen` to check whether a timer is still active.
 
 .. function:: AsyncCondition()
 
    .. Docstring generated from Julia source
 
-   Create a async condition that wakes up tasks waiting for it (by calling ``wait`` on the object) when notified from C by a call to uv_async_send. Waiting tasks are woken with an error when the object is closed (by ``close``\ ). Use ``isopen`` to check whether it is still active.
+   Create a async condition that wakes up tasks waiting for it (by calling :func:`wait` on the object) when notified from C by a call to ``uv_async_send``\ . Waiting tasks are woken with an error when the object is closed (by :func:`close`\ . Use :func:`isopen` to check whether it is still active.
 
 .. function:: AsyncCondition(callback::Function)
 

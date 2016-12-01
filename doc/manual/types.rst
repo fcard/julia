@@ -410,6 +410,7 @@ However, the value for ``baz`` must be convertible to :class:`Int`:
 
     julia> Foo((), 23.5, 1)
     ERROR: InexactError()
+     in convert(::Type{Int64}, ::Float64) at ./float.jl:656
      in Foo(::Tuple{}, ::Float64, ::Int64) at ./none:2
      ...
 
@@ -453,10 +454,10 @@ instance of such types::
     type NoFields
     end
 
-    julia> is(NoFields(), NoFields())
+    julia> NoFields() === NoFields()
     true
 
-The ``is`` function confirms that the "two" constructed instances of
+The ``===`` function confirms that the "two" constructed instances of
 ``NoFields`` are actually one and the same. Singleton types are
 described in further detail `below <#man-singleton-types>`_.
 
@@ -765,14 +766,14 @@ each field:
     ERROR: MethodError: Cannot `convert` an object of type Float64 to an object of type Point{Float64}
     This may have arisen from a call to the constructor Point{Float64}(...),
     since type constructors fall back to convert methods.
-     in Point{Float64}(::Float64) at ./sysimg.jl:53
+     in Point{Float64}(::Float64) at ./sysimg.jl:66
      ...
 
     julia> Point{Float64}(1.0,2.0,3.0)
     ERROR: MethodError: no method matching Point{Float64}(::Float64, ::Float64, ::Float64)
     Closest candidates are:
       Point{Float64}{T}(::Any, ::Any) at none:3
-      Point{Float64}{T}(::Any) at sysimg.jl:53
+      Point{Float64}{T}(::Any) at sysimg.jl:66
      ...
 
 Only one default constructor is generated for parametric types, since
@@ -1487,7 +1488,7 @@ You can safely access the value of a :obj:`Nullable` object using :func:`get`:
 
     julia> get(Nullable{Float64}())
     ERROR: NullException()
-     in get(::Nullable{Float64}) at ./nullable.jl:62
+     in get(::Nullable{Float64}) at ./nullable.jl:91
      ...
 
     julia> get(Nullable(1.0))
