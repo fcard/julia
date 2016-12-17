@@ -308,7 +308,7 @@ function skipchars(io::IO, pred; linecomment=nothing)
     _skipchars(io, pred, linecomment)
 end
 
-@noinline function _skipchars(io::IO, pred, linecomment)
+function _skipchars(io::IO, pred, linecomment)
     while !eof(io)
         c = read(io, Char)
         if c === linecomment
