@@ -305,10 +305,6 @@ function peek(s::IOStream)
 end
 
 function skipchars(io::IO, pred; linecomment=nothing)
-    _skipchars(io, pred, linecomment)
-end
-
-function _skipchars(io::IO, pred, linecomment)
     while !eof(io)
         c = read(io, Char)
         if c === linecomment
