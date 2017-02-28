@@ -6,9 +6,9 @@ if is_windows()
 end
 
 ## types ##
-abstract IOServer
-abstract LibuvServer <: IOServer
-abstract LibuvStream <: IO
+abstract type IOServer end
+abstract type LibuvServer <: IOServer end
+abstract type LibuvStream <: IO end
 
 # IO
 # +- AbstractIOBuffer{T<:AbstractArray{UInt8,1}} (not exported)
@@ -99,7 +99,7 @@ function uv_status_string(x)
     return "invalid status"
 end
 
-type PipeEndpoint <: LibuvStream
+mutable struct PipeEndpoint <: LibuvStream
     handle::Ptr{Void}
     status::Int
     buffer::IOBuffer
@@ -127,7 +127,7 @@ type PipeEndpoint <: LibuvStream
     end
 end
 
-type PipeServer <: LibuvServer
+mutable struct PipeServer <: LibuvServer
     handle::Ptr{Void}
     status::Int
     connectnotify::Condition
@@ -143,14 +143,14 @@ type PipeServer <: LibuvServer
     end
 end
 
-typealias LibuvPipe Union{PipeEndpoint, PipeServer}
+const LibuvPipe = Union{PipeEndpoint, PipeServer}
 
 function PipeServer()
     p = PipeServer(Libc.malloc(_sizeof_uv_named_pipe), StatusUninit)
     return init_pipe!(p; readable=true)
 end
 
-type TTY <: LibuvStream
+mutable struct TTY <: LibuvStream
     handle::Ptr{Void}
     status::Int
     buffer::IOBuffer
@@ -529,7 +529,7 @@ end
 #  (composed of two half-pipes: .in and .out)
 ##########################################
 
-type Pipe <: AbstractPipe
+mutable struct Pipe <: AbstractPipe
     in::PipeEndpoint # writable
     out::PipeEndpoint # readable
 end
@@ -660,9 +660,11 @@ function start_reading(stream::LibuvStream)
         if !isreadable(stream)
             error("tried to read a stream that is not readable")
         end
+        # libuv may call the alloc callback immediately
+        # for a TTY on Windows, so ensure the status is set first
+        stream.status = StatusActive
         ret = ccall(:uv_read_start, Cint, (Ptr{Void}, Ptr{Void}, Ptr{Void}),
                     stream, uv_jl_alloc_buf::Ptr{Void}, uv_jl_readcb::Ptr{Void})
-        stream.status = StatusActive
         return ret
     elseif stream.status == StatusPaused
         stream.status = StatusActive
@@ -682,8 +684,8 @@ if is_windows()
     # causes all other operations on that stream to lockup
     function stop_reading(stream::LibuvStream)
         if stream.status == StatusActive
-            ccall(:uv_read_stop, Cint, (Ptr{Void},), stream)
             stream.status = StatusOpen
+            ccall(:uv_read_stop, Cint, (Ptr{Void},), stream)
         end
         nothing
     end
@@ -1015,38 +1017,38 @@ end
 """
     redirect_stdout([stream]) -> (rd, wr)
 
-Create a pipe to which all C and Julia level [`STDOUT`](:obj:`STDOUT`) output
+Create a pipe to which all C and Julia level [`STDOUT`](@ref) output
 will be redirected.
 Returns a tuple `(rd, wr)` representing the pipe ends.
-Data written to [`STDOUT`](:obj:`STDOUT`) may now be read from the `rd` end of
+Data written to [`STDOUT`](@ref) may now be read from the `rd` end of
 the pipe. The `wr` end is given for convenience in case the old
-[`STDOUT`](:obj:`STDOUT`) object was cached by the user and needs to be replaced
+[`STDOUT`](@ref) object was cached by the user and needs to be replaced
 elsewhere.
 
 !!! note
-    `stream` must be a `TTY`, a [`Pipe`](:obj:`Pipe`), or a [`TCPSocket`](:obj:`TCPSocket`).
+    `stream` must be a `TTY`, a `Pipe`, or a `TCPSocket`.
 """
 redirect_stdout
 
 """
     redirect_stderr([stream]) -> (rd, wr)
 
-Like [`redirect_stdout`](:func:`redirect_stdout`), but for [`STDERR`](:obj:`STDERR`).
+Like [`redirect_stdout`](@ref), but for [`STDERR`](@ref).
 
 !!! note
-    `stream` must be a `TTY`, a [`Pipe`](:obj:`Pipe`), or a [`TCPSocket`](:obj:`TCPSocket`).
+    `stream` must be a `TTY`, a `Pipe`, or a `TCPSocket`.
 """
 redirect_stderr
 
 """
     redirect_stdin([stream]) -> (rd, wr)
 
-Like [`redirect_stdout`](:func:`redirect_stdout`), but for [`STDIN`](:obj:`STDIN`).
+Like [`redirect_stdout`](@ref), but for [`STDIN`](@ref).
 Note that the order of the return tuple is still `(rd, wr)`,
-i.e. data to be read from [`STDIN`](:obj:`STDIN`) may be written to `wr`.
+i.e. data to be read from [`STDIN`](@ref) may be written to `wr`.
 
 !!! note
-    `stream` must be a `TTY`, a [`Pipe`](:obj:`Pipe`), or a [`TCPSocket`](:obj:`TCPSocket`).
+    `stream` must be a `TTY`, a `Pipe`, or a `TCPSocket`.
 """
 redirect_stdin
 
@@ -1067,33 +1069,33 @@ end
 """
     redirect_stdout(f::Function, stream)
 
-Run the function `f` while redirecting [`STDOUT`](:obj:`STDOUT`) to `stream`.
-Upon completion, [`STDOUT`](:obj:`STDOUT`) is restored to its prior setting.
+Run the function `f` while redirecting [`STDOUT`](@ref) to `stream`.
+Upon completion, [`STDOUT`](@ref) is restored to its prior setting.
 
 !!! note
-    `stream` must be a `TTY`, a [`Pipe`](:obj:`Pipe`), or a [`TCPSocket`](:obj:`TCPSocket`).
+    `stream` must be a `TTY`, a `Pipe`, or a `TCPSocket`.
 """
 redirect_stdout(f::Function, stream)
 
 """
     redirect_stderr(f::Function, stream)
 
-Run the function `f` while redirecting [`STDERR`](:obj:`STDERR`) to `stream`.
-Upon completion, [`STDERR`](:obj:`STDERR`) is restored to its prior setting.
+Run the function `f` while redirecting [`STDERR`](@ref) to `stream`.
+Upon completion, [`STDERR`](@ref) is restored to its prior setting.
 
 !!! note
-    `stream` must be a `TTY`, a [`Pipe`](:obj:`Pipe`), or a [`TCPSocket`](:obj:`TCPSocket`).
+    `stream` must be a `TTY`, a `Pipe`, or a `TCPSocket`.
 """
 redirect_stderr(f::Function, stream)
 
 """
     redirect_stdin(f::Function, stream)
 
-Run the function `f` while redirecting [`STDIN`](:obj:`STDIN`) to `stream`.
-Upon completion, [`STDIN`](:obj:`STDIN`) is restored to its prior setting.
+Run the function `f` while redirecting [`STDIN`](@ref) to `stream`.
+Upon completion, [`STDIN`](@ref) is restored to its prior setting.
 
 !!! note
-    `stream` must be a `TTY`, a [`Pipe`](:obj:`Pipe`), or a [`TCPSocket`](:obj:`TCPSocket`).
+    `stream` must be a `TTY`, a `Pipe`, or a `TCPSocket`.
 """
 redirect_stdin(f::Function, stream)
 
@@ -1103,7 +1105,7 @@ reset(x::LibuvStream)    = reset(x.buffer)
 ismarked(x::LibuvStream) = ismarked(x.buffer)
 
 # BufferStream's are non-OS streams, backed by a regular IOBuffer
-type BufferStream <: LibuvStream
+mutable struct BufferStream <: LibuvStream
     buffer::IOBuffer
     r_c::Condition
     close_c::Condition

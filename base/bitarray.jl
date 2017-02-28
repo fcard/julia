@@ -4,11 +4,11 @@
 
 # notes: bits are stored in contiguous chunks
 #        unused bits must always be set to 0
-type BitArray{N} <: DenseArray{Bool, N}
+mutable struct BitArray{N} <: DenseArray{Bool, N}
     chunks::Vector{UInt64}
     len::Int
     dims::NTuple{N,Int}
-    function BitArray(dims::Vararg{Int,N})
+    function BitArray{N}(dims::Vararg{Int,N}) where N
         n = 1
         i = 1
         for d in dims
@@ -33,13 +33,26 @@ end
     BitArray{N}(dims::NTuple{N,Int})
 
 Construct an uninitialized `BitArray` with the given dimensions.
-Behaves identically to the [`Array`](:func:`Array`) constructor.
+Behaves identically to the [`Array`](@ref) constructor.
+
+```julia
+julia> BitArray(2, 2)
+2×2 BitArray{2}:
+ false  false
+ false  true
+
+julia> BitArray((3, 1))
+3×1 BitArray{2}:
+ false
+ true
+ false
+```
 """
 BitArray(dims::Integer...) = BitArray(map(Int,dims))
-BitArray{N}(dims::NTuple{N,Int}) = BitArray{N}(dims...)
+BitArray(dims::NTuple{N,Int}) where {N} = BitArray{N}(dims...)
 
-typealias BitVector BitArray{1}
-typealias BitMatrix BitArray{2}
+const BitVector = BitArray{1}
+const BitMatrix = BitArray{2}
 
 BitVector() = BitArray{1}(0)
 
@@ -54,9 +67,9 @@ size(B::BitArray) = B.dims
     ifelse(d == 1, B.len, 1)
 end
 
-isassigned{N}(B::BitArray{N}, i::Int) = 1 <= i <= length(B)
+isassigned(B::BitArray, i::Int) = 1 <= i <= length(B)
 
-linearindexing{A<:BitArray}(::Type{A}) = LinearFast()
+IndexStyle(::Type{<:BitArray}) = IndexLinear()
 
 ## aux functions ##
 
@@ -225,7 +238,7 @@ function fill_chunks!(Bc::Array{UInt64}, x::Bool, pos::Integer, numbits::Integer
     end
 end
 
-copy_to_bitarray_chunks!(dest::Vector{UInt64}, pos_d::Integer, src::BitArray, pos_s::Integer, numbits::Integer) =
+copy_to_bitarray_chunks!(dest::Vector{UInt64}, pos_d::Int, src::BitArray, pos_s::Int, numbits::Int) =
     copy_chunks!(dest, pos_d, src.chunks, pos_s, numbits)
 
 # pack 8 Bools encoded as one contiguous UIn64 into a single byte, e.g.:
@@ -302,79 +315,7 @@ function copy_to_bitarray_chunks!(Bc::Vector{UInt64}, pos_d::Int, C::Array{Bool}
     end
 end
 
-function copy_to_bitarray_chunks!(Bc::Vector{UInt64}, pos_d::Int, C::Array, pos_s::Int, numbits::Int)
-    bind = pos_d
-    cind = pos_s
-    lastind = pos_d + numbits - 1
-    @inbounds while bind ≤ lastind
-        unsafe_bitsetindex!(Bc, Bool(C[cind]), bind)
-        bind += 1
-        cind += 1
-    end
-end
-
-# Note: the next two functions rely on the following definition of the conversion to Bool:
-#   convert(::Type{Bool}, x::Real) = x==0 ? false : x==1 ? true : throw(InexactError())
-# they're used to pre-emptively check in bulk when possible, which is much faster.
-# Also, the functions can be overloaded for custom types T<:Real :
-#  a) in the unlikely eventuality that they use a different logic for Bool conversion
-#  b) to skip the check if not necessary
-@inline try_bool_conversion(x::Real) = x == 0 || x == 1 || throw(InexactError())
-@inline unchecked_bool_convert(x::Real) = x == 1
-
-function copy_to_bitarray_chunks!{T<:Real}(Bc::Vector{UInt64}, pos_d::Int, C::Array{T}, pos_s::Int, numbits::Int)
-    @inbounds for i = (1:numbits) + pos_s - 1
-        try_bool_conversion(C[i])
-    end
-
-    kd0, ld0 = get_chunks_id(pos_d)
-    kd1, ld1 = get_chunks_id(pos_d + numbits - 1)
-
-    delta_kd = kd1 - kd0
-
-    u = _msk64
-    if delta_kd == 0
-        msk_d0 = msk_d1 = ~(u << ld0) | (u << (ld1+1))
-        lt0 = ld1
-    else
-        msk_d0 = ~(u << ld0)
-        msk_d1 = (u << (ld1+1))
-        lt0 = 63
-    end
-
-    bind = kd0
-    ind = pos_s
-    @inbounds if ld0 > 0
-        c = UInt64(0)
-        for j = ld0:lt0
-            c |= (UInt64(unchecked_bool_convert(C[ind])) << j)
-            ind += 1
-        end
-        Bc[kd0] = (Bc[kd0] & msk_d0) | (c & ~msk_d0)
-        bind += 1
-    end
-
-    nc = _div64(numbits - ind + pos_s)
-    @inbounds for i = 1:nc
-        c = UInt64(0)
-        for j = 0:63
-            c |= (UInt64(unchecked_bool_convert(C[ind])) << j)
-            ind += 1
-        end
-        Bc[bind] = c
-        bind += 1
-    end
-
-    @inbounds if bind ≤ kd1
-        @assert bind == kd1
-        c = UInt64(0)
-        for j = 0:ld1
-            c |= (UInt64(unchecked_bool_convert(C[ind])) << j)
-            ind += 1
-        end
-        Bc[kd1] = (Bc[kd1] & msk_d1) | (c & ~msk_d1)
-    end
-end
+## More definitions in multidimensional.jl
 
 # auxiliary definitions used when filling a BitArray via a Vector{Bool} cache
 # (e.g. when constructing from an iterable, or in broadcast!)
@@ -735,6 +676,20 @@ end
 @inline function setindex!(B::BitArray, x, i::Int)
     @boundscheck checkbounds(B, i)
     unsafe_bitsetindex!(B.chunks, convert(Bool, x), i)
+    return B
+end
+
+indexoffset(i) = first(i)-1
+indexoffset(::Colon) = 0
+
+@inline function setindex!(B::BitArray, x, J0::Union{Colon,UnitRange{Int}})
+    I0 = to_indices(B, (J0,))[1]
+    @boundscheck checkbounds(B, I0)
+    y = Bool(x)
+    l0 = length(I0)
+    l0 == 0 && return B
+    f0 = indexoffset(I0)+1
+    fill_chunks!(B.chunks, y, f0, l0)
     return B
 end
 
@@ -1136,9 +1091,6 @@ function empty!(B::BitVector)
     return B
 end
 
-## Misc functions
-broadcast(::typeof(abs), B::BitArray) = copy(B)
-
 ## Unary operators ##
 
 function (-)(B::BitArray)
@@ -1169,9 +1121,9 @@ function (-)(B::BitArray)
     end
     return A
 end
-sign(B::BitArray) = copy(B)
+broadcast(::typeof(sign), B::BitArray) = copy(B)
 
-function (~)(B::BitArray)
+function broadcast(::typeof(~), B::BitArray)
     C = similar(B)
     Bc = B.chunks
     if !isempty(Bc)
@@ -1187,7 +1139,7 @@ end
 """
     flipbits!(B::BitArray{N}) -> BitArray{N}
 
-Performs a bitwise not operation on `B`. See [`~`](:ref:`~ operator <~>`).
+Performs a bitwise not operation on `B`. See [`~`](@ref).
 
 ```jldoctest
 julia> A = trues(2,2)
@@ -1212,7 +1164,6 @@ function flipbits!(B::BitArray)
     return B
 end
 
-!(B::BitArray) = ~B
 
 ## Binary arithmetic operators ##
 
@@ -1232,35 +1183,6 @@ for f in (:+, :-)
     end
 end
 
-for (f) in (:.+, :.-)
-    for (arg1, arg2, T, t) in ((:(B::BitArray), :(x::Bool)    , Int               , (:b, :x)),
-                               (:(B::BitArray), :(x::Number)  , :(Bool, typeof(x)), (:b, :x)),
-                               (:(x::Bool)    , :(B::BitArray), Int               , (:x, :b)),
-                               (:(x::Number)  , :(B::BitArray), :(typeof(x), Bool), (:x, :b)))
-        @eval function ($f)($arg1, $arg2)
-            $(if T === Int
-                quote
-                    r = Array{Int}(size(B))
-                end
-            else
-                quote
-                    T = promote_op($f, $(T.args[1]), $(T.args[2]))
-                    T === Any && return [($f)($(t[1]), $(t[2])) for b in B]
-                    r = Array{T}(size(B))
-                end
-            end)
-            bi = start(B)
-            ri = 1
-            while !done(B, bi)
-                b, bi = next(B, bi)
-                @inbounds r[ri] = ($f)($(t[1]), $(t[2]))
-                ri += 1
-            end
-            return r
-        end
-    end
-end
-
 for f in (:/, :\)
     @eval begin
         ($f)(A::BitArray, B::BitArray) = ($f)(Array(A), Array(B))
@@ -1269,78 +1191,16 @@ end
 (/)(B::BitArray, x::Number) = (/)(Array(B), x)
 (/)(x::Number, B::BitArray) = (/)(x, Array(B))
 
-function div(A::BitArray, B::BitArray)
-    shp = promote_shape(size(A), size(B))
-    all(B) || throw(DivideError())
-    return reshape(copy(A), shp)
-end
-div(A::BitArray, B::Array{Bool}) = div(A, BitArray(B))
-div(A::Array{Bool}, B::BitArray) = div(BitArray(A), B)
-function div(B::BitArray, x::Bool)
-    return x ? copy(B) : throw(DivideError())
-end
-function div(x::Bool, B::BitArray)
-    all(B) || throw(DivideError())
-    return x ? trues(size(B)) : falses(size(B))
-end
-function div(x::Number, B::BitArray)
-    all(B) || throw(DivideError())
-    y = div(x, true)
-    return fill(y, size(B))
-end
-
-function mod(A::BitArray, B::BitArray)
-    shp = promote_shape(size(A), size(B))
-    all(B) || throw(DivideError())
-    return falses(shp)
-end
-mod(A::BitArray, B::Array{Bool}) = mod(A, BitArray(B))
-mod(A::Array{Bool}, B::BitArray) = mod(BitArray(A), B)
-function mod(B::BitArray, x::Bool)
-    return x ? falses(size(B)) : throw(DivideError())
-end
-function mod(x::Bool, B::BitArray)
-    all(B) || throw(DivideError())
-    return falses(size(B))
-end
-function mod(x::Number, B::BitArray)
-    all(B) || throw(DivideError())
-    y = mod(x, true)
-    return fill(y, size(B))
-end
-
-for f in (:div, :mod)
-    @eval begin
-        function ($f)(B::BitArray, x::Number)
-            T = promote_op($f, Bool, typeof(x))
-            T === Any && return [($f)(b, x) for b in B]
-            F = Array{T}(size(B))
-            for i = 1:length(F)
-                F[i] = ($f)(B[i], x)
-            end
-            return F
-        end
-    end
-end
-
-function (&)(B::BitArray, x::Bool)
-    x ? copy(B) : falses(size(B))
-end
-(&)(x::Bool, B::BitArray) = B & x
-
-function (|)(B::BitArray, x::Bool)
-    x ? trues(size(B)) : copy(B)
-end
-(|)(x::Bool, B::BitArray) = B | x
-
-function xor(B::BitArray, x::Bool)
-    x ? ~B : copy(B)
-end
-xor(x::Bool, B::BitArray) = xor(B, x)
-
+# broadcast specializations for &, |, and xor/⊻
+broadcast(::typeof(&), B::BitArray, x::Bool) = x ? copy(B) : falses(size(B))
+broadcast(::typeof(&), x::Bool, B::BitArray) = broadcast(&, B, x)
+broadcast(::typeof(|), B::BitArray, x::Bool) = x ? trues(size(B)) : copy(B)
+broadcast(::typeof(|), x::Bool, B::BitArray) = broadcast(|, B, x)
+broadcast(::typeof(xor), B::BitArray, x::Bool) = x ? .~B : copy(B)
+broadcast(::typeof(xor), x::Bool, B::BitArray) = broadcast(xor, B, x)
 for f in (:&, :|, :xor)
     @eval begin
-        function ($f)(A::BitArray, B::BitArray)
+        function broadcast(::typeof($f), A::BitArray, B::BitArray)
             F = BitArray(promote_shape(size(A),size(B))...)
             Fc = F.chunks
             Ac = A.chunks
@@ -1352,77 +1212,11 @@ for f in (:&, :|, :xor)
             Fc[end] &= _msk_end(F)
             return F
         end
-        ($f)(A::DenseArray{Bool}, B::BitArray) = ($f)(BitArray(A), B)
-        ($f)(B::BitArray, A::DenseArray{Bool}) = ($f)(B, BitArray(A))
-        ($f)(x::Number, B::BitArray) = ($f)(x, Array(B))
-        ($f)(B::BitArray, x::Number) = ($f)(Array(B), x)
+        broadcast(::typeof($f), A::DenseArray{Bool}, B::BitArray) = broadcast($f, BitArray(A), B)
+        broadcast(::typeof($f), B::BitArray, A::DenseArray{Bool}) = broadcast($f, B, BitArray(A))
     end
 end
 
-function (.^)(B::BitArray, x::Bool)
-    x ? copy(B) : trues(size(B))
-end
-function (.^)(x::Bool, B::BitArray)
-    x ? trues(size(B)) : ~B
-end
-function (.^)(x::Number, B::BitArray)
-    z = x ^ false
-    u = x ^ true
-    reshape([ B[i] ? u : z for i = 1:length(B) ], size(B))
-end
-function (.^)(B::BitArray, x::Integer)
-    x == 0 && return trues(size(B))
-    x < 0 && throw(DomainError())
-    return copy(B)
-end
-function (.^){T<:Number}(B::BitArray, x::T)
-    x == 0 && return ones(typeof(true ^ x), size(B))
-    T <: Real && x > 0 && return convert(Array{T}, B)
-
-    z = nothing
-    u = nothing
-    zerr = nothing
-    uerr = nothing
-    try
-        z = false^x
-    catch err
-        zerr = err
-    end
-    try
-        u = true^x
-    catch err
-        uerr = err
-    end
-    if zerr === nothing && uerr === nothing
-        t = promote_type(typeof(z), typeof(u))
-    elseif zerr === nothing
-        t = typeof(z)
-    else
-        t = typeof(u)
-    end
-    F = Array{t}(size(B))
-    for i = 1:length(B)
-        if B[i]
-            if uerr === nothing
-                F[i] = u
-            else
-                throw(uerr)
-            end
-        else
-            if zerr === nothing
-                F[i] = z
-            else
-                throw(zerr)
-            end
-        end
-    end
-    return F
-end
-
-(.*)(x::Bool, B::BitArray) = x & B
-(.*)(B::BitArray, x::Bool) = B & x
-(.*)(x::Number, B::BitArray) = x .* Array(B)
-(.*)(B::BitArray, x::Number) = Array(B) .* x
 
 ## promotion to complex ##
 
@@ -1438,38 +1232,19 @@ end
 
 ## Data movement ##
 
-# TODO some of this could be optimized
-
-function slicedim(A::BitArray, d::Integer, i::Integer)
-    d_in = size(A)
-    leading = d_in[1:(d-1)]
-    d_out = tuple(leading..., d_in[(d+1):end]...)
-
-    M = prod(leading)
-    N = length(A)
-    stride = M * d_in[d]
-
-    B = BitArray(d_out)
-    index_offset = 1 + (i-1)*M
-
-    l = 1
-
-    if M == 1
-        for j = 0:stride:(N-stride)
-            B[l] = A[j + index_offset]
-            l += 1
-        end
+# preserve some special behavior
+function slicedim(A::BitVector, d::Integer, i::Integer)
+    d >= 1 || throw(ArgumentError("dimension must be ≥ 1"))
+    if d > 1
+        i == 1 || throw_boundserror(A, (:, ntuple(k->1,d-2)..., i))
+        A[:]
     else
-        for j = 0:stride:(N-stride)
-            offs = j + index_offset
-            for k = 0:(M-1)
-                B[l] = A[offs + k]
-                l += 1
-            end
-        end
+        fill!(BitArray{0}(), A[i]) # generic slicedim would return A[i] here
     end
-    return B
 end
+
+
+# TODO some of this could be optimized
 
 function flipdim(A::BitArray, d::Integer)
     nd = ndims(A)
@@ -1583,7 +1358,8 @@ end
 
 reverse(v::BitVector) = reverse!(copy(v))
 
-function (<<)(B::BitVector, i::Int)
+
+function (<<)(B::BitVector, i::UInt)
     n = length(B)
     i == 0 && return copy(B)
     A = falses(n)
@@ -1591,7 +1367,7 @@ function (<<)(B::BitVector, i::Int)
     return A
 end
 
-function (>>>)(B::BitVector, i::Int)
+function (>>>)(B::BitVector, i::UInt)
     n = length(B)
     i == 0 && return copy(B)
     A = falses(n)
@@ -1599,7 +1375,11 @@ function (>>>)(B::BitVector, i::Int)
     return A
 end
 
-(>>)(B::BitVector, i::Int) = B >>> i
+(>>)(B::BitVector, i::Union{Int, UInt}) = B >>> i
+
+# signed integer version of shift operators with handling of negative values
+(<<)(B::BitVector, i::Int) = (i >=0 ? B << unsigned(i) : B >> unsigned(-i))
+(>>>)(B::BitVector, i::Int) = (i >=0 ? B >> unsigned(i) : B << unsigned(-i))
 
 """
     rol!(dest::BitVector, src::BitVector, i::Integer) -> BitVector
@@ -1632,7 +1412,7 @@ rol!(B::BitVector, i::Integer) = rol!(B, B, i)
 
 Performs a left rotation operation, returning a new `BitVector`.
 `i` controls how far to rotate the bits.
-See also [`rol!`](:func:`rol!`).
+See also [`rol!`](@ref).
 
 ```jldoctest
 julia> A = BitArray([true, true, false, false, true])
@@ -1701,7 +1481,7 @@ ror!(B::BitVector, i::Integer) = ror!(B, B, i)
 
 Performs a right rotation operation on `B`, returning a new `BitVector`.
 `i` controls how far to rotate the bits.
-See also [`ror!`](:func:`ror!`).
+See also [`ror!`](@ref).
 
 ```jldoctest
 julia> A = BitArray([true, true, false, false, true])
@@ -1749,6 +1529,7 @@ function countnz(B::BitArray)
     end
     return n
 end
+count(B::BitArray) = countnz(B)
 
 # returns the index of the next non-zero element, or 0 if all zeros
 function findnext(B::BitArray, start::Integer)
@@ -1997,8 +1778,6 @@ map(::typeof(zero), A::BitArray) = fill!(similar(A), false)
 map(::typeof(one), A::BitArray) = fill!(similar(A), true)
 map(::typeof(identity), A::BitArray) = copy(A)
 
-map!(f, A::BitArray) = map!(f, A, A)
-map!(::typeof(identity), A::BitArray) = A
 map!(::Union{typeof(~), typeof(!)}, dest::BitArray, A::BitArray) = bit_map!(~, dest, A)
 map!(::typeof(zero), dest::BitArray, A::BitArray) = fill!(dest, false)
 map!(::typeof(one), dest::BitArray, A::BitArray) = fill!(dest, true)
@@ -2050,94 +1829,6 @@ function filter(f, Bs::BitArray)
     Bs[boolmap]
 end
 
-## Transpose ##
-
-transpose(B::BitVector) = reshape(copy(B), 1, length(B))
-
-# fast 8x8 bit transpose from Henry S. Warrens's "Hacker's Delight"
-# http://www.hackersdelight.org/hdcodetxt/transpose8.c.txt
-function transpose8x8(x::UInt64)
-    y = x
-    t = xor(y, y >>> 7) & 0x00aa00aa00aa00aa
-    y = xor(y, t, t << 7)
-    t = xor(y, y >>> 14) & 0x0000cccc0000cccc
-    y = xor(y, t, t << 14)
-    t = xor(y, y >>> 28) & 0x00000000f0f0f0f0
-    return xor(y, t, t << 28)
-end
-
-function form_8x8_chunk(Bc::Vector{UInt64}, i1::Int, i2::Int, m::Int, cgap::Int, cinc::Int, nc::Int, msk8::UInt64)
-    x = UInt64(0)
-
-    k, l = get_chunks_id(i1 + (i2 - 1) * m)
-    r = 0
-    for j = 1:8
-        k > nc && break
-        x |= ((Bc[k] >>> l) & msk8) << r
-        if l + 8 >= 64 && nc > k
-            r0 = 8 - _mod64(l + 8)
-            x |= (Bc[k + 1] & (msk8 >>> r0)) << (r + r0)
-        end
-        k += cgap + (l + cinc >= 64 ? 1 : 0)
-        l = _mod64(l + cinc)
-        r += 8
-    end
-    return x
-end
-
-# note: assumes B is filled with 0's
-function put_8x8_chunk(Bc::Vector{UInt64}, i1::Int, i2::Int, x::UInt64, m::Int, cgap::Int, cinc::Int, nc::Int, msk8::UInt64)
-    k, l = get_chunks_id(i1 + (i2 - 1) * m)
-    r = 0
-    for j = 1:8
-        k > nc && break
-        Bc[k] |= ((x >>> r) & msk8) << l
-        if l + 8 >= 64 && nc > k
-            r0 = 8 - _mod64(l + 8)
-            Bc[k + 1] |= ((x >>> (r + r0)) & (msk8 >>> r0))
-        end
-        k += cgap + (l + cinc >= 64 ? 1 : 0)
-        l = _mod64(l + cinc)
-        r += 8
-    end
-    return
-end
-
-function transpose(B::BitMatrix)
-    l1 = size(B, 1)
-    l2 = size(B, 2)
-    Bt = falses(l2, l1)
-
-    cgap1, cinc1 = _div64(l1), _mod64(l1)
-    cgap2, cinc2 = _div64(l2), _mod64(l2)
-
-    Bc = B.chunks
-    Btc = Bt.chunks
-
-    nc = length(Bc)
-
-    for i = 1:8:l1
-        msk8_1 = UInt64(0xff)
-        if (l1 < i + 7)
-            msk8_1 >>>= i + 7 - l1
-        end
-
-        for j = 1:8:l2
-            x = form_8x8_chunk(Bc, i, j, l1, cgap1, cinc1, nc, msk8_1)
-            x = transpose8x8(x)
-
-            msk8_2 = UInt64(0xff)
-            if (l2 < j + 7)
-                msk8_2 >>>= j + 7 - l2
-            end
-
-            put_8x8_chunk(Btc, j, i, x, l2, cgap2, cinc2, nc, msk8_2)
-        end
-    end
-    return Bt
-end
-
-ctranspose(B::BitArray) = transpose(B)
 
 ## Concatenation ##
 

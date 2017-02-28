@@ -32,13 +32,13 @@ import ..LineEdit:
     accept_result,
     terminal
 
-abstract AbstractREPL
+abstract type AbstractREPL end
 
 answer_color(::AbstractREPL) = ""
 
 const JULIA_PROMPT = "julia> "
 
-type REPLBackend
+mutable struct REPLBackend
     "channel for AST"
     repl_channel::Channel
     "channel for results: (value, nothing) or (error, backtrace)"
@@ -66,7 +66,7 @@ function eval_user_input(ast::ANY, backend::REPLBackend)
                 value = eval(Main, ast)
                 backend.in_eval = false
                 # note: value wrapped in a closure to ensure it doesn't get passed through expand
-                eval(Main, Expr(:(=), :ans, Expr(:call, ()->value)))
+                eval(Main, Expr(:body, Expr(:(=), :ans, QuoteNode(value)), Expr(:return, nothing)))
                 put!(backend.response_channel, (value, nothing))
             end
             break
@@ -110,19 +110,7 @@ function ip_matches_func(ip, func::Symbol)
     return false
 end
 
-function display_error(io::IO, er, bt)
-    Base.with_output_color(:red, io) do io
-        print(io, "ERROR: ")
-        # remove REPL-related frames from interactive printing
-        eval_ind = findlast(addr->ip_matches_func(addr, :eval), bt)
-        if eval_ind != 0
-            bt = bt[1:eval_ind-1]
-        end
-        Base.showerror(IOContext(io, :limit => true), er, bt)
-    end
-end
-
-immutable REPLDisplay{R<:AbstractREPL} <: Display
+struct REPLDisplay{R<:AbstractREPL} <: Display
     repl::R
 end
 
@@ -146,16 +134,16 @@ function print_response(errio::IO, val::ANY, bt, show_value::Bool, have_color::B
         try
             Base.sigatomic_end()
             if bt !== nothing
-                display_error(errio, val, bt)
-                println(errio)
+                eval(Main, Expr(:body, Expr(:return, Expr(:call, Base.display_error,
+                                                          errio, QuoteNode(val), bt))))
                 iserr, lasterr = false, ()
             else
                 if val !== nothing && show_value
                     try
                         if specialdisplay === nothing
-                            display(val)
+                            eval(Main, Expr(:body, Expr(:return, Expr(:call, display, QuoteNode(val)))))
                         else
-                            display(specialdisplay,val)
+                            eval(Main, Expr(:body, Expr(:return, Expr(:call, specialdisplay, QuoteNode(val)))))
                         end
                     catch err
                         println(errio, "Error showing value of type ", typeof(val), ":")
@@ -167,6 +155,8 @@ function print_response(errio::IO, val::ANY, bt, show_value::Bool, have_color::B
         catch err
             if bt !== nothing
                 println(errio, "SYSTEM: show(lasterr) caused an error")
+                println(errio, err)
+                Base.show_backtrace(errio, bt)
                 break
             end
             val = err
@@ -177,7 +167,7 @@ function print_response(errio::IO, val::ANY, bt, show_value::Bool, have_color::B
 end
 
 # A reference to a backend
-immutable REPLBackendRef
+struct REPLBackendRef
     repl_channel::Channel
     response_channel::Channel
 end
@@ -193,7 +183,7 @@ end
 
 ## BasicREPL ##
 
-type BasicREPL <: AbstractREPL
+mutable struct BasicREPL <: AbstractREPL
     terminal::TextTerminal
     waserror::Bool
     BasicREPL(t) = new(t,false)
@@ -215,7 +205,7 @@ function run_frontend(repl::BasicREPL, backend::REPLBackendRef)
         interrupted = false
         while true
             try
-                line *= readline(repl.terminal)
+                line *= readline(repl.terminal, chomp=false)
             catch e
                 if isa(e,InterruptException)
                     try # raise the debugger if present
@@ -251,7 +241,7 @@ end
 
 ## LineEditREPL ##
 
-type LineEditREPL <: AbstractREPL
+mutable struct LineEditREPL <: AbstractREPL
     t::TextTerminal
     hascolor::Bool
     prompt_color::String
@@ -278,22 +268,18 @@ terminal(r::LineEditREPL) = r.t
 
 LineEditREPL(t::TextTerminal, envcolors = false) =  LineEditREPL(t,
                                               true,
-                                              julia_green,
+                                              Base.text_colors[:light_green],
                                               Base.input_color(),
                                               Base.answer_color(),
                                               Base.text_colors[:red],
                                               Base.text_colors[:yellow],
                                               false, false, false, envcolors)
 
-type REPLCompletionProvider <: CompletionProvider
-    r::LineEditREPL
-end
+mutable struct REPLCompletionProvider <: CompletionProvider; end
 
-type ShellCompletionProvider <: CompletionProvider
-    r::LineEditREPL
-end
+mutable struct ShellCompletionProvider <: CompletionProvider; end
 
-immutable LatexCompletions <: CompletionProvider; end
+struct LatexCompletions <: CompletionProvider; end
 
 beforecursor(buf::IOBuffer) = String(buf.data[1:buf.ptr-1])
 
@@ -320,7 +306,7 @@ function complete_line(c::LatexCompletions, s)
 end
 
 
-type REPLHistoryProvider <: HistoryProvider
+mutable struct REPLHistoryProvider <: HistoryProvider
     history::Array{String,1}
     history_file
     start_idx::Int
@@ -347,7 +333,7 @@ An editor may have converted tabs to spaces at line """
 
 function hist_getline(file)
     while !eof(file)
-        line = readline(file)
+        line = readline(file, chomp=false)
         isempty(line) && return line
         line[1] in "\r\n" || return line
     end
@@ -609,8 +595,6 @@ function history_reset_state(hist::REPLHistoryProvider)
 end
 LineEdit.reset_state(hist::REPLHistoryProvider) = history_reset_state(hist)
 
-const julia_green = "\033[1m\033[32m"
-
 function return_callback(s)
     ast = Base.syntax_deprecation_warnings(false) do
         Base.parse_input_line(String(LineEdit.buffer(s)))
@@ -649,7 +633,7 @@ function respond(f, repl, main; pass_empty = false)
         line = String(take!(buf))
         if !isempty(line) || pass_empty
             reset(repl)
-            val, bt = send_to_backend(f(line), backend(repl))
+            val, bt = send_to_backend(eval(:(($f)($line))), backend(repl))
             if !ends_with_semicolon(line) || bt !== nothing
                 print_response(repl, val, bt, true, Base.have_color)
             end
@@ -725,7 +709,7 @@ function setup_interface(repl::LineEditREPL; hascolor = repl.hascolor, extra_rep
     ############################### Stage I ################################
 
     # This will provide completions for REPL and help mode
-    replc = REPLCompletionProvider(repl)
+    replc = REPLCompletionProvider()
 
     # Set up the main Julia prompt
     julia_prompt = Prompt(JULIA_PROMPT;
@@ -753,12 +737,12 @@ function setup_interface(repl::LineEditREPL; hascolor = repl.hascolor, extra_rep
         prompt_suffix = hascolor ?
             (repl.envcolors ? Base.input_color : repl.input_color) : "",
         keymap_func_data = repl,
-        complete = ShellCompletionProvider(repl),
+        complete = ShellCompletionProvider(),
         # Transform "foo bar baz" into `foo bar baz` (shell quoting)
         # and pass into Base.repl_cmd for processing (handles `ls` and `cd`
         # special)
         on_done = respond(repl, julia_prompt) do line
-            Expr(:call, :(Base.repl_cmd), macroexpand(Expr(:macrocall, Symbol("@cmd"),line)), outstream(repl))
+            Expr(:call, :(Base.repl_cmd), Cmd(Base.shell_split(line)), outstream(repl))
         end)
 
 
@@ -854,7 +838,7 @@ function setup_interface(repl::LineEditREPL; hascolor = repl.hascolor, extra_rep
                     end
                     # Check if input line starts with "julia> ", remove it if we are in prompt paste mode
                     jl_prompt_len = 7
-                     if (firstline || isprompt_paste) && (oldpos + jl_prompt_len <= sizeof(input) && input[oldpos:oldpos+jl_prompt_len-1] == JULIA_PROMPT)
+                    if (firstline || isprompt_paste) && (oldpos + jl_prompt_len <= sizeof(input) && input[oldpos:oldpos+jl_prompt_len-1] == JULIA_PROMPT)
                         isprompt_paste = true
                         oldpos += jl_prompt_len
                     # If we are prompt pasting and current statement does not begin with julia> , skip to next line
@@ -899,6 +883,26 @@ function setup_interface(repl::LineEditREPL; hascolor = repl.hascolor, extra_rep
                 firstline = false
             end
         end,
+
+        # Open the editor at the location of a stackframe
+        # This is accessing a global variable that gets set in
+        # the show_backtrace function.
+        "^Q" => (s, o...) -> begin
+            linfos = Base.LAST_BACKTRACE_LINE_INFOS
+            str = String(take!(LineEdit.buffer(s)))
+            n = tryparse(Int, str)
+            isnull(n) && @goto writeback
+            n = get(n)
+            if n <= 0 || n > length(linfos) || startswith(linfos[n][1], "./REPL")
+                @goto writeback
+            end
+            Base.edit(linfos[n][1], linfos[n][2])
+            Base.LineEdit.refresh_line(s)
+            return
+            @label writeback
+            write(Base.LineEdit.buffer(s), str)
+            return
+        end,
     )
 
     prefix_prompt, prefix_keymap = LineEdit.setup_prefix_keymap(hp, julia_prompt)
@@ -941,7 +945,7 @@ end
 
 ## StreamREPL ##
 
-type StreamREPL <: AbstractREPL
+mutable struct StreamREPL <: AbstractREPL
     stream::IO
     prompt_color::String
     input_color::String
@@ -949,7 +953,7 @@ type StreamREPL <: AbstractREPL
     waserror::Bool
     StreamREPL(stream,pc,ic,ac) = new(stream,pc,ic,ac,false)
 end
-StreamREPL(stream::IO) = StreamREPL(stream, julia_green, Base.input_color(), Base.answer_color())
+StreamREPL(stream::IO) = StreamREPL(stream, Base.text_colors[:light_green], Base.input_color(), Base.answer_color())
 run_repl(stream::IO) = run_repl(StreamREPL(stream))
 
 outstream(s::StreamREPL) = s.stream
@@ -985,7 +989,7 @@ function run_frontend(repl::StreamREPL, backend::REPLBackendRef)
         if have_color
             print(repl.stream, input_color(repl))
         end
-        line = readline(repl.stream)
+        line = readline(repl.stream, chomp=false)
         if !isempty(line)
             ast = Base.parse_input_line(line)
             if have_color

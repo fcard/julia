@@ -1,6 +1,8 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
 # fold(l|r) & mapfold(l|r)
+@test foldl(+, Int64[]) === Int64(0) # In reference to issues #7465/#20144 (PR #20160)
+@test foldl(+, Int16[]) === Int32(0)
 @test foldl(-, 1:5) == -13
 @test foldl(-, 10, 1:5) == -5
 
@@ -16,6 +18,8 @@
 @test Base.mapfoldl((x)-> x ⊻ true, |, [true false true false false]) == true
 @test Base.mapfoldl((x)-> x ⊻ true, |, false, [true false true false false]) == true
 
+@test foldr(+, Int64[]) === Int64(0) # In reference to issue #20144 (PR #20160)
+@test foldr(+, Int16[]) === Int32(0)
 @test foldr(-, 1:5) == 3
 @test foldr(-, 10, 1:5) == -7
 
@@ -23,6 +27,8 @@
 @test Base.mapfoldr(abs2, -, 10, 2:5) == -4
 
 # reduce & mapreduce
+@test reduce(+, Int64[]) === Int64(0) # In reference to issue #20144 (PR #20160)
+@test reduce(+, Int16[]) === Int32(0)
 @test reduce((x,y)->"($x+$y)", 9:11) == "((9+10)+11)"
 @test reduce(max, [8 6 7 5 3 0 9]) == 9
 @test reduce(+, 1000, 1:5) == (1000 + 1 + 2 + 3 + 4 + 5)
@@ -60,20 +66,7 @@ a = sum(sin, z)
 z = [-4, -3, 2, 5]
 fz = float(z)
 a = randn(32) # need >16 elements to trigger BLAS code path
-b = complex(randn(32), randn(32))
-@test sumabs(Float64[]) === 0.0
-@test sumabs([Int8(-2)]) === Int32(2)
-@test sumabs(z) === 14
-@test sumabs(fz) === 14.0
-@test sumabs(a) ≈ sum(abs.(a))
-@test sumabs(b) ≈ sum(abs.(b))
-
-@test sumabs2(Float64[]) === 0.0
-@test sumabs2([Int8(-2)]) === Int32(4)
-@test sumabs2(z) === 54
-@test sumabs2(fz) === 54.0
-@test sumabs2(a) ≈ sum(abs2.(a))
-@test sumabs2(b) ≈ sum(abs2.(b))
+b = complex.(randn(32), randn(32))
 
 # check variants of summation for type-stability and other issues (#6069)
 sum2(itr) = invoke(sum, Tuple{Any}, itr)
@@ -99,8 +92,17 @@ for f in (sum3, sum4, sum7, sum8)
 end
 @test typeof(sum(Int8[])) == typeof(sum(Int8[1])) == typeof(sum(Int8[1 7]))
 
-@test sum_kbn([1,1e100,1,-1e100]) == 2
-@test sum_kbn(Float64[]) == 0.0
+@test sum_kbn([1,1e100,1,-1e100]) === 2.0
+@test sum_kbn(Float64[]) === 0.0
+@test sum_kbn(i for i=1.0:1.0:10.0) === 55.0
+@test sum_kbn(i for i=1:1:10) === 55
+@test sum_kbn([1 2 3]) === 6
+@test sum_kbn([2+im 3-im]) === 5+0im
+@test sum_kbn([1+im 2+3im]) === 3+4im
+@test sum_kbn([7 8 9]) === sum_kbn([8 9 7])
+@test sum_kbn(i for i=1:1:10) === sum_kbn(i for i=10:-1:1)
+@test sum_kbn([-0.0]) === -0.0
+@test sum_kbn([-0.0,-0.0]) === -0.0
 
 # prod
 
@@ -152,14 +154,6 @@ prod2(itr) = invoke(prod, Tuple{Any}, itr)
 @test isnan(minimum([4., 3., NaN, 5., 2.]))
 @test isequal(extrema([4., 3., NaN, 5., 2.]), (NaN,NaN))
 
-@test maxabs(Int[]) == 0
-@test_throws ArgumentError Base.minabs(Int[])
-
-@test maxabs(-2) == 2
-@test minabs(-2) == 2
-@test maxabs([1, -2, 3, -4]) == 4
-@test minabs([-1, 2, -3, 4]) == 1
-
 @test maximum(abs2, 3:7) == 49
 @test minimum(abs2, 3:7) == 9
 
@@ -207,10 +201,10 @@ prod2(itr) = invoke(prod, Tuple{Any}, itr)
 @test all(x->x>0, [4]) == true
 @test all(x->x>0, [-3, 4, 5]) == false
 
-@test reduce(|, fill(trues(5), 24))  == trues(5)
-@test reduce(|, fill(falses(5), 24)) == falses(5)
-@test reduce(&, fill(trues(5), 24))  == trues(5)
-@test reduce(&, fill(falses(5), 24)) == falses(5)
+@test reduce((a, b) -> a .| b, fill(trues(5), 24))  == trues(5)
+@test reduce((a, b) -> a .| b, fill(falses(5), 24)) == falses(5)
+@test reduce((a, b) -> a .& b, fill(trues(5), 24))  == trues(5)
+@test reduce((a, b) -> a .& b, fill(falses(5), 24)) == falses(5)
 
 @test_throws TypeError any(x->0, [false])
 @test_throws TypeError all(x->0, [false])
@@ -224,9 +218,35 @@ let c = [0, 0], A = 1:1000
     @test c == [10,10]
 end
 
+# 19151 - always short circuit
+let c = Int[], d = Int[], A = 1:9
+    all((push!(c, x); x < 5) for x in A)
+    @test c == collect(1:5)
+
+    any((push!(d, x); x > 4) for x in A)
+    @test d == collect(1:5)
+end
+
+# any/all with non-boolean collections
+
+let f(x) = x == 1 ? true : x == 2 ? false : 1
+    @test any(Any[false,true,false])
+    @test any(map(f, [2,1,2]))
+    @test any([f(x) for x in [2,1,2]])
+
+    @test all(Any[true,true,true])
+    @test all(map(f, [1,1,1]))
+    @test all([f(x) for x in [1,1,1]])
+
+    @test_throws TypeError any([1,true])
+    @test_throws TypeError all([true,1])
+    @test_throws TypeError any(map(f,[3,1]))
+    @test_throws TypeError all(map(f,[1,3]))
+end
+
 # any and all with functors
 
-immutable SomeFunctor end
+struct SomeFunctor end
 (::SomeFunctor)(x) = true
 
 @test any(SomeFunctor(), 1:10)
@@ -249,8 +269,18 @@ immutable SomeFunctor end
 
 # count & countnz
 
-@test count(x->x>0, Int[]) == 0
-@test count(x->x>0, -3:5) == 5
+@test count(x->x>0, Int[]) == count(Bool[]) == 0
+@test count(x->x>0, -3:5) == count((-3:5) .> 0) == 5
+@test count([true, true, false, true]) == count(BitVector([true, true, false, true])) == 3
+@test_throws TypeError count(sqrt, [1])
+@test_throws TypeError count([1])
+let itr = (x for x in 1:10 if x < 7)
+    @test count(iseven, itr) == 3
+    @test_throws TypeError count(itr)
+    @test_throws TypeError count(sqrt, itr)
+end
+@test count(iseven(x) for x in 1:10 if x < 7) == 3
+@test count(iseven(x) for x in 1:10 if x < -7) == 0
 
 @test countnz(Int[]) == 0
 @test countnz(Int[0]) == 0

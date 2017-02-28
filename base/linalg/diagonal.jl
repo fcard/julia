@@ -2,7 +2,7 @@
 
 ## Diagonal matrices
 
-immutable Diagonal{T} <: AbstractMatrix{T}
+struct Diagonal{T} <: AbstractMatrix{T}
     diag::Vector{T}
 end
 """
@@ -100,10 +100,10 @@ end
 
 parent(D::Diagonal) = D.diag
 
-ishermitian{T<:Real}(D::Diagonal{T}) = true
-ishermitian(D::Diagonal) = all(D.diag .== real(D.diag))
+ishermitian(D::Diagonal{<:Real}) = true
+ishermitian(D::Diagonal) = isreal(D.diag)
 issymmetric(D::Diagonal) = true
-isposdef(D::Diagonal) = all(D.diag .> 0)
+isposdef(D::Diagonal) = all(x -> x > 0, D.diag)
 
 factorize(D::Diagonal) = D
 
@@ -138,9 +138,9 @@ end
 +(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag + Db.diag)
 -(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag - Db.diag)
 
-*{T<:Number}(x::T, D::Diagonal) = Diagonal(x * D.diag)
-*{T<:Number}(D::Diagonal, x::T) = Diagonal(D.diag * x)
-/{T<:Number}(D::Diagonal, x::T) = Diagonal(D.diag / x)
+*(x::Number, D::Diagonal) = Diagonal(x * D.diag)
+*(D::Diagonal, x::Number) = Diagonal(D.diag * x)
+/(D::Diagonal, x::Number) = Diagonal(D.diag / x)
 *(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag .* Db.diag)
 *(D::Diagonal, V::AbstractVector) = D.diag .* V
 
@@ -223,7 +223,7 @@ A_mul_B!(A::AbstractMatrix,B::Diagonal)  = scale!(A,B.diag)
 A_mul_Bt!(A::AbstractMatrix,B::Diagonal) = scale!(A,B.diag)
 A_mul_Bc!(A::AbstractMatrix,B::Diagonal) = scale!(A,conj(B.diag))
 
-/(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag ./ Db.diag )
+/(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag ./ Db.diag)
 function A_ldiv_B!{T}(D::Diagonal{T}, v::AbstractVector{T})
     if length(v) != length(D.diag)
         throw(DimensionMismatch("diagonal matrix is $(length(D.diag)) by $(length(D.diag)) but right hand side has $(length(v)) rows"))
@@ -254,6 +254,11 @@ function A_ldiv_B!{T}(D::Diagonal{T}, V::AbstractMatrix{T})
     V
 end
 
+# Methods to resolve ambiguities with `Diagonal`
+@inline *(rowvec::RowVector, D::Diagonal) = transpose(D * transpose(rowvec))
+@inline A_mul_Bt(D::Diagonal, rowvec::RowVector) = D*transpose(rowvec)
+@inline A_mul_Bc(D::Diagonal, rowvec::RowVector) = D*ctranspose(rowvec)
+
 conj(D::Diagonal) = Diagonal(conj(D.diag))
 transpose(D::Diagonal) = D
 ctranspose(D::Diagonal) = conj(D)
@@ -261,10 +266,10 @@ ctranspose(D::Diagonal) = conj(D)
 diag(D::Diagonal) = D.diag
 trace(D::Diagonal) = sum(D.diag)
 det(D::Diagonal) = prod(D.diag)
-logdet{T<:Real}(D::Diagonal{T}) = sum(log, D.diag)
-function logdet{T<:Complex}(D::Diagonal{T}) #Make sure branch cut is correct
-    x = sum(log, D.diag)
-    -pi<imag(x)<pi ? x : real(x)+(mod2pi(imag(x)+pi)-pi)*im
+logdet(D::Diagonal{<:Real}) = sum(log, D.diag)
+function logdet(D::Diagonal{<:Complex}) # make sure branch cut is correct
+    z = sum(log, D.diag)
+    complex(real(z), rem2pi(imag(z), RoundNearest))
 end
 # identity matrices via eye(Diagonal{type},n)
 eye{T}(::Type{Diagonal{T}}, n::Int) = Diagonal(ones(T,n))
@@ -293,7 +298,7 @@ function A_ldiv_B!(D::Diagonal, B::StridedVecOrMat)
 end
 (\)(D::Diagonal, A::AbstractMatrix) = D.diag .\ A
 (\)(D::Diagonal, b::AbstractVector) = D.diag .\ b
-(\)(Da::Diagonal, Db::Diagonal) = Diagonal(Db.diag ./ Da.diag)
+(\)(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag .\ Db.diag)
 
 function inv{T}(D::Diagonal{T})
     Di = similar(D.diag, typeof(inv(zero(T))))
@@ -327,20 +332,20 @@ function pinv{T}(D::Diagonal{T}, tol::Real)
 end
 
 #Eigensystem
-eigvals{T<:Number}(D::Diagonal{T}) = D.diag
+eigvals(D::Diagonal{<:Number}) = D.diag
 eigvals(D::Diagonal) = [eigvals(x) for x in D.diag] #For block matrices, etc.
 eigvecs(D::Diagonal) = eye(D)
 eigfact(D::Diagonal) = Eigen(eigvals(D), eigvecs(D))
 
 #Singular system
-svdvals{T<:Number}(D::Diagonal{T}) = sort!(abs.(D.diag), rev = true)
+svdvals(D::Diagonal{<:Number}) = sort!(abs.(D.diag), rev = true)
 svdvals(D::Diagonal) = [svdvals(v) for v in D.diag]
-function svd{T<:Number}(D::Diagonal{T})
+function svd(D::Diagonal{<:Number})
     S   = abs.(D.diag)
     piv = sortperm(S, rev = true)
-    U   = Array(Diagonal(D.diag ./ S))
+    U   = Diagonal(D.diag ./ S)
     Up  = hcat([U[:,i] for i = 1:length(D.diag)][piv]...)
-    V   = eye(D)
+    V   = Diagonal(ones(D.diag))
     Vp  = hcat([V[:,i] for i = 1:length(D.diag)][piv]...)
     return (Up, S[piv], Vp)
 end

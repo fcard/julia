@@ -50,9 +50,29 @@ for elty in (Float32, Float64, Complex64, Complex128, Int)
     @test ctranspose(T) == Tridiagonal(conj(du), conj(d), conj(dl))
 
     @test abs.(T) == Tridiagonal(abs.(dl),abs.(d),abs.(du))
+    if elty <: Real
+        @test round.(T) == Tridiagonal(round.(dl),round.(d),round.(du))
+        @test isa(round.(T), Tridiagonal)
+        @test trunc.(T) == Tridiagonal(trunc.(dl),trunc.(d),trunc.(du))
+        @test isa(trunc.(T), Tridiagonal)
+        @test floor.(T) == Tridiagonal(floor.(dl),floor.(d),floor.(du))
+        @test isa(floor.(T), Tridiagonal)
+        @test ceil.(T) == Tridiagonal(ceil.(dl),ceil.(d),ceil.(du))
+        @test isa(ceil.(T), Tridiagonal)
+    end
     @test real(T) == Tridiagonal(real(dl),real(d),real(du))
     @test imag(T) == Tridiagonal(imag(dl),imag(d),imag(du))
     @test abs.(Ts) == SymTridiagonal(abs.(d),abs.(dl))
+    if elty <: Real
+        @test round.(Ts) == SymTridiagonal(round.(d),round.(dl))
+        @test isa(round.(Ts), SymTridiagonal)
+        @test trunc.(Ts) == SymTridiagonal(trunc.(d),trunc.(dl))
+        @test isa(trunc.(Ts), SymTridiagonal)
+        @test floor.(Ts) == SymTridiagonal(floor.(d),floor.(dl))
+        @test isa(floor.(Ts), SymTridiagonal)
+        @test ceil.(Ts) == SymTridiagonal(ceil.(d),ceil.(dl))
+        @test isa(ceil.(Ts), SymTridiagonal)
+    end
     @test real(Ts) == SymTridiagonal(real(d),real(dl))
     @test imag(Ts) == SymTridiagonal(imag(d),imag(dl))
 
@@ -173,7 +193,7 @@ for elty in (Float32, Float64, Complex64, Complex128, Int)
         end
 
     # issue #1490
-    @test_approx_eq_eps det(ones(elty, 3,3)) zero(elty) 3*eps(real(one(elty)))
+    @test det(ones(elty,3,3)) ≈ zero(elty) atol=3*eps(real(one(elty)))
 
     @test det(SymTridiagonal(elty[],elty[])) == one(elty)
 
@@ -216,7 +236,7 @@ function test_approx_eq_vecs{S<:Real,T<:Real}(a::StridedVecOrMat{S}, b::StridedV
         ev1, ev2 = a[:,i], b[:,i]
         deviation = min(abs(norm(ev1-ev2)),abs(norm(ev1+ev2)))
         if !isnan(deviation)
-            @test_approx_eq_eps deviation 0.0 error
+            @test deviation ≈ 0.0 atol=error
         end
     end
 end
@@ -267,19 +287,19 @@ let n = 12 #Size of matrix problem to test
 
         debug && println("Simple unary functions")
         for func in (det, inv)
-            @test_approx_eq_eps func(A) func(fA) n^2*sqrt(eps(relty))
+            @test func(A) ≈ func(fA) atol=n^2*sqrt(eps(relty))
         end
 
         debug && println("Rounding to Ints")
         if elty <: Real
-            @test round(Int,A) == round(Int,fA)
-            @test isa(round(Int,A), SymTridiagonal)
-            @test trunc(Int,A) == trunc(Int,fA)
-            @test isa(trunc(Int,A), SymTridiagonal)
-            @test ceil(Int,A) == ceil(Int,fA)
-            @test isa(ceil(Int,A), SymTridiagonal)
-            @test floor(Int,A) == floor(Int,fA)
-            @test isa(floor(Int,A), SymTridiagonal)
+            @test round.(Int,A) == round.(Int,fA)
+            @test isa(round.(Int,A), SymTridiagonal)
+            @test trunc.(Int,A) == trunc.(Int,fA)
+            @test isa(trunc.(Int,A), SymTridiagonal)
+            @test ceil.(Int,A) == ceil.(Int,fA)
+            @test isa(ceil.(Int,A), SymTridiagonal)
+            @test floor.(Int,A) == floor.(Int,fA)
+            @test isa(floor.(Int,A), SymTridiagonal)
         end
 
         debug && println("Tridiagonal/SymTridiagonal mixing ops")
@@ -385,19 +405,19 @@ let n = 12 #Size of matrix problem to test
 
         debug && println("Simple unary functions")
         for func in (det, inv)
-            @test_approx_eq_eps func(A) func(fA) n^2*sqrt(eps(relty))
+            @test func(A) ≈ func(fA) atol=n^2*sqrt(eps(relty))
         end
 
         debug && println("Rounding to Ints")
         if elty <: Real
-            @test round(Int,A) == round(Int,fA)
-            @test isa(round(Int,A), Tridiagonal)
-            @test trunc(Int,A) == trunc(Int,fA)
-            @test isa(trunc(Int,A), Tridiagonal)
-            @test ceil(Int,A) == ceil(Int,fA)
-            @test isa(ceil(Int,A), Tridiagonal)
-            @test floor(Int,A) == floor(Int,fA)
-            @test isa(floor(Int,A), Tridiagonal)
+            @test round.(Int,A) == round.(Int,fA)
+            @test isa(round.(Int,A), Tridiagonal)
+            @test trunc.(Int,A) == trunc.(Int,fA)
+            @test isa(trunc.(Int,A), Tridiagonal)
+            @test ceil.(Int,A) == ceil.(Int,fA)
+            @test isa(ceil.(Int,A), Tridiagonal)
+            @test floor.(Int,A) == floor.(Int,fA)
+            @test isa(floor.(Int,A), Tridiagonal)
         end
 
         debug && println("Binary operations")
