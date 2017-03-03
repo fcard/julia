@@ -321,13 +321,22 @@ function peek(s::IOStream)
     ccall(:ios_peekc, Cint, (Ptr{Void},), s)
 end
 
+
+function _seekback(pos::Integer, s::IOStream)
+    ccall(:ios_seekback, Cint, (Cint, Ptr{Void}), pos, s)
+end
+
+let b1 = Char(0x80), b2 = Char(0x800), b3 = Char(0x10000)
+    global @pure _charbytes(c) = c < b1 ? 1 : c < b2 ? 2 : c < b3 ? 3 : 4
+end
+
 function skipchars(io::IOStream, pred; linecomment=nothing)
     while !eof(io)
         c = read(io, Char)
         if c === linecomment
             readline(io)
         elseif !pred(c)
-            seek(io,position(io)-sizeof(string(c)))
+            _seekback(_charbytes(c), io)
             break
         end
     end
