@@ -312,7 +312,7 @@ end
 const _chtmp = Array{Char}(1)
 function peekchar(s::IOStream)
     if ccall(:ios_peekutf8, Cint, (Ptr{Void}, Ptr{Char}), s, _chtmp) < 0
-        return Char(-1)
+        return typemax(Char)
     end
     return _chtmp[1]
 end
@@ -321,15 +321,25 @@ function peek(s::IOStream)
     ccall(:ios_peekc, Cint, (Ptr{Void},), s)
 end
 
-function skipchars(s::IOStream, pred; linecomment::Char=Char(0xffffffff))
-    ch = peekchar(s); status = Int(ch)
-    while status >= 0 && (pred(ch) || ch == linecomment)
-        if ch == linecomment
-            readline(s)
-        else
-            read(s, Char)  # advance one character
-        end
-        ch = peekchar(s); status = Int(ch)
-    end
-    return s
+
+function seekback(pos::Integer, s::IOStream)
+  ccall(:ios_seekback, Cint, (Cint, Ptr{Void}), pos, s)
 end
+
+let b1 = Char(0x80), b2 = Char(0x800), b3 = Char(0x10000)
+  global @pure _charbytes(c) = c < b1 ? 1 : c < b2 ? 2 : c < b3 ? 3 : 4
+end
+
+function skipchars(io::IOStream, pred; linecomment=nothing)
+    while !eof(io)
+        c = read(io, Char)
+        if c === linecomment
+            readline(io)
+        elseif !pred(c)
+            seekback(_charbytes(c), io)
+            break
+        end
+    end
+    return io
+end
+
