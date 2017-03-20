@@ -1083,18 +1083,6 @@ int ios_ungetc(int c, ios_t *s)
     return c;
 }
 
-int ios_seekback(ios_t *s, int pos) {
-    if (s->state == bst_wr)
-        return IOS_EOF;
-
-    if (s->bpos > pos-1) {
-        s->bpos -= pos;
-        return s->bpos;
-    } else {
-        return IOS_EOF;
-    }
-}
-
 int ios_getutf8(ios_t *s, uint32_t *pwc)
 {
     int c;
