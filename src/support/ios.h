@@ -134,7 +134,7 @@ JL_DLLEXPORT int ios_getc(ios_t *s);
 JL_DLLEXPORT int ios_peekc(ios_t *s);
 //wint_t ios_getwc(ios_t *s);
 int ios_ungetc(int c, ios_t *s);
-JL_DLLEXPORT int ios_seekback(int pos, ios_t *s);
+JL_DLLEXPORT int ios_seekback(ios_t *s, int pos);
 //wint_t ios_ungetwc(ios_t *s, wint_t wc);
 #define ios_puts(str, s) ios_write(s, str, strlen(str))
 
