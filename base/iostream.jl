@@ -322,8 +322,8 @@ function peek(s::IOStream)
 end
 
 
-function _seekback(pos::Integer, s::IOStream)
-    ccall(:ios_seekback, Cint, (Cint, Ptr{Void}), pos, s)
+function _seekback(s::IOStream, pos::Integer)
+    ccall(:ios_seekback, Cint, (Ptr{Void}, Cint), s, pos)
 end
 
 function skipchars(io::IOStream, pred; linecomment=nothing)
@@ -332,7 +332,7 @@ function skipchars(io::IOStream, pred; linecomment=nothing)
         if c === linecomment
             readline(io)
         elseif !pred(c)
-            _seekback(codelen(c), io)
+            _seekback(io, codelen(c))
             break
         end
     end

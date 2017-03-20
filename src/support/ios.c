@@ -1083,7 +1083,7 @@ int ios_ungetc(int c, ios_t *s)
     return c;
 }
 
-int ios_seekback(int pos, ios_t *s) {
+int ios_seekback(ios_t *s, int pos) {
     if (s->state == bst_wr)
         return IOS_EOF;
 
