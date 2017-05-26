@@ -1170,6 +1170,8 @@
                                           v))
                                     anames))
                        ,@(cddr e)))))
+        ((and (length= e 2) (symbol? (cadr e)))
+           (expand-forms `(function ,(symbol (string #\@ (cadr e))))))
         (else
          (error "invalid macro definition"))))
 
