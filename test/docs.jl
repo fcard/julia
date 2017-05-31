@@ -1047,3 +1047,8 @@ let foo_docs = meta(I22105)[@var(I22105.foo)].docs
     @test docstr.data[:typesig] === Union{}
     @test docstr.data[:binding] == Binding(I22105, :foo)
 end
+
+# issue 22098
+"an empty macro"
+macro mdoc22098 end
+@test docstrings_equal(@doc(:@mdoc22098), doc"an empty macro")
