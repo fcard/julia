@@ -4997,3 +4997,7 @@ end
 end
 @test M22026.foofunction(Int16) === Int16
 @test M22026.foofunction2(3) === 6.0f0
+
+# issue 22098
+macro m22098 end
+@test_throws MethodError @eval @m22098()
